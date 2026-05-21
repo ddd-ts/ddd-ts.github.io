@@ -1,0 +1,145 @@
+---
+title: Quickstart
+description: A complete event-sourced aggregate in a single file, using only @ddd-ts/core and the in-memory adapters.
+---
+
+This page walks through a tiny but complete event-sourced aggregate: an
+`Account` with `open`, `deposit` and `withdraw` operations, plus a `Cashflow`
+projection that aggregates deposits across accounts.
+
+You only need three packages to run it locally:
+
+```sh
+pnpm add @ddd-ts/core
+pnpm add -D @ddd-ts/event-sourcing-inmemory @ddd-ts/store-inmemory
+```
+
+## Model the domain
+
+Events first. `EsEvent(name, payload)` produces a class whose payload is
+described with `@ddd-ts/shape` shorthands — the same primitives you'd use for
+plain value objects.
+
+```ts
+import { EsEvent } from "@ddd-ts/core";
+
+export class AccountId {
+  constructor(public value: string) {}
+  serialize() { return this.value; }
+  static deserialize(value: string) { return new AccountId(value); }
+  static generate() { return new AccountId(crypto.randomUUID()); }
+}
+
+export class AccountOpened extends EsEvent("AccountOpened", {
+  accountId: AccountId,
+  at: Date,
+}) {}
+
+export class Deposited extends EsEvent("Deposited", {
+  accountId: AccountId,
+  amount: Number,
+}) {}
+
+export class Withdrawn extends EsEvent("Withdrawn", {
+  accountId: AccountId,
+  amount: Number,
+}) {}
+```
+
+`EsAggregate` then ties the events to a strongly typed state.
+
+```ts
+import { EsAggregate, On } from "@ddd-ts/core";
+
+export class Account extends EsAggregate("Account", {
+  events: [AccountOpened, Deposited, Withdrawn],
+  state: {
+    id: AccountId,
+    balance: Number,
+    createdAt: Date,
+  },
+}) {
+  static open() {
+    return this.new(AccountOpened.new({
+      accountId: AccountId.generate(),
+      at: new Date(),
+    }));
+  }
+
+  deposit(amount: number) {
+    this.apply(Deposited.new({ accountId: this.id, amount }));
+  }
+
+  withdraw(amount: number) {
+    this.apply(Withdrawn.new({ accountId: this.id, amount }));
+  }
+
+  @On(AccountOpened)
+  static onOpened(e: AccountOpened) {
+    return new Account({ id: e.payload.accountId, balance: 0, createdAt: e.payload.at });
+  }
+
+  @On(Deposited)
+  onDeposited(e: Deposited) { this.balance += e.payload.amount; }
+
+  @On(Withdrawn)
+  onWithdrawn(e: Withdrawn) { this.balance -= e.payload.amount; }
+}
+```
+
+The static `@On(AccountOpened)` handler is the **constructor handler** — it
+returns the initial state for the aggregate. Instance handlers mutate the
+already-loaded aggregate.
+
+## Wire the in-memory infrastructure
+
+```ts
+import {
+  InMemoryEventStreamStore,
+  InMemoryEventStreamStorageLayer,
+  MakeInMemoryEventStreamAggregateStore,
+} from "@ddd-ts/event-sourcing-inmemory";
+import { AutoSerializer, SerializerRegistry } from "@ddd-ts/core";
+
+class AccountOpenedSerializer extends AutoSerializer(AccountOpened, 1) {}
+class DepositedSerializer    extends AutoSerializer(Deposited, 1) {}
+class WithdrawnSerializer    extends AutoSerializer(Withdrawn, 1) {}
+
+const serializers = new SerializerRegistry()
+  .add(AccountOpened, new AccountOpenedSerializer())
+  .add(Deposited,    new DepositedSerializer())
+  .add(Withdrawn,    new WithdrawnSerializer());
+
+const eventStore = new InMemoryEventStreamStore(
+  new InMemoryEventStreamStorageLayer(),
+  serializers,
+);
+
+const AccountStore = MakeInMemoryEventStreamAggregateStore(Account);
+const accounts = new AccountStore(eventStore);
+```
+
+## Use it
+
+```ts
+const account = Account.open();
+account.deposit(100);
+account.deposit(50);
+account.withdraw(30);
+
+await accounts.save(account);
+
+const loaded = await accounts.load(account.id);
+console.log(loaded?.balance); // 120
+```
+
+That's it — a real event-sourced aggregate, with an append-only stream behind
+it, fully typed end-to-end and runnable without any external service.
+
+## Next steps
+
+- Add a [projection](/domain/projections/) that maintains a `Cashflow` read model.
+- Replace the in-memory event store with [Firestore](/event-sourcing/firestore/)
+  without touching the aggregate code.
+- Use [`@ddd-ts/freeze`](/domain/freeze/) to pin the event payload shapes so a
+  future refactor can't break old events.

@@ -1,0 +1,33 @@
+---
+title: "@ddd-ts/event-sourcing-esdb"
+description: EventStoreDB adapter — work in progress.
+---
+
+`@ddd-ts/event-sourcing-esdb` is an in-progress adapter for
+[EventStoreDB](https://www.eventstore.com/eventstoredb), targeting the same
+contracts as the in-memory and Firestore adapters.
+
+:::caution[Status]
+The package is published but the public exports are currently commented out.
+Behaviour is not yet stable; use the Firestore or in-memory adapters in
+production.
+:::
+
+## Goals
+
+- Map `EventStreamStore` onto EventStoreDB streams 1:1 (with per-stream
+  optimistic concurrency).
+- Use EventStoreDB's `$by_category` projection as the natural
+  `LakeSource` backend.
+- Use Persistent Subscriptions as the underlying mechanism for the
+  projector.
+- Reuse the same `EventStreamStoreSuite` / `EventLakeStoreSuite` /
+  `ProjectedStreamReaderSuite` as the other adapters — passing the suite is
+  the definition of done.
+
+## Tracking progress
+
+Follow the package in the monorepo at
+[`packages/event-sourcing-esdb`](https://github.com/ddd-ts/monorepo/tree/main/packages/event-sourcing-esdb).
+The published API will mirror the Firestore adapter once the suite passes
+green end-to-end.

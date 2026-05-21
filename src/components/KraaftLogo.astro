@@ -1,0 +1,43 @@
+---
+import { Image } from "astro:assets";
+import mark from "../assets/kraaft-mark.png";
+import wordmark from "../assets/kraaft.svg";
+---
+
+<a
+  class="kraaft-logo"
+  href="https://kraaft.co"
+  target="_blank"
+  rel="noopener noreferrer"
+  aria-label="Kraaft (opens in a new tab)"
+>
+  <Image src={mark} alt="" class="kraaft-logo__mark" loading="eager" />
+  <Image src={wordmark} alt="" class="kraaft-logo__wordmark" loading="eager" />
+</a>
+
+<style>
+  .kraaft-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    height: 2.5rem;
+    width: fit-content;
+    text-decoration: none;
+    color: inherit;
+    transition: opacity 0.15s ease;
+  }
+  .kraaft-logo:hover {
+    opacity: 0.85;
+  }
+
+  .kraaft-logo__mark {
+    height: 2.5rem;
+    width: auto;
+  }
+
+  .kraaft-logo__wordmark {
+    height: 1.5rem;
+    width: auto;
+    filter: brightness(0) invert(1);
+  }
+</style>

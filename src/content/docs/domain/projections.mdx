@@ -1,0 +1,103 @@
+---
+title: Projections
+description: Building read models from event streams using Projection and ProjectedStreamReader.
+---
+
+A **projection** is a read model rebuilt from events. In DDD-TS it's a class
+that declares which events it consumes and how it reacts to each one. Behind
+it, a `ProjectedStreamReader` (in-memory, Firestore, …) feeds those events to
+the projection as they arrive.
+
+## Declaring a projection
+
+```ts
+import { Projection, On } from "@ddd-ts/core";
+import { Deposited, Withdrawn } from "../account";
+import { Cashflow } from "./cashflow";
+
+export class CashflowProjection extends Projection("Cashflow", [Deposited, Withdrawn]) {
+  constructor(private readonly store: Store<Cashflow>) { super(); }
+
+  @On(Deposited)
+  async onDeposited(e: Deposited) {
+    const cashflow = (await this.store.load(e.payload.accountId.value)) ??
+      new Cashflow(e.payload.accountId.value);
+    cashflow.register(e.payload.amount);
+    await this.store.save(cashflow);
+  }
+
+  @On(Withdrawn)
+  async onWithdrawn(e: Withdrawn) {
+    const cashflow = (await this.store.load(e.payload.accountId.value)) ??
+      new Cashflow(e.payload.accountId.value);
+    cashflow.register(-e.payload.amount);
+    await this.store.save(cashflow);
+  }
+}
+```
+
+`Projection(name, events)` is a maker that:
+
+- registers the projection under a stable `name` (used for checkpoints);
+- declares which event types it handles;
+- enforces at compile time that every declared event has a matching `@On`
+  handler.
+
+## Projected streams
+
+A projection rarely consumes a single aggregate's stream — usually it spans
+several. `ProjectedStream` describes a filtered view across one or more
+sources:
+
+```ts
+import { LakeSource, StreamSource, ProjectedStream } from "@ddd-ts/core";
+
+const stream = new ProjectedStream(
+  StreamSource(Account, [Deposited, Withdrawn]),
+  LakeSource(Transfer, [TransferCompleted]),
+);
+```
+
+`StreamSource(AggregateClass, [EventClasses])` picks one or more event types
+from a specific aggregate's stream; `LakeSource(...)` does the same for an
+event lake. The `ProjectedStreamReader` returns events in the order they were
+appended, across sources.
+
+## Running a projection
+
+The infrastructure packages each ship a projection runner. With Firestore,
+`FirestoreProjector` claims a portion of the stream, replays new events
+through the projection, and persists a checkpoint so it can resume:
+
+```ts
+import { FirestoreProjector } from "@ddd-ts/event-sourcing-firestore";
+
+const projector = new FirestoreProjector(
+  firestore,
+  new CashflowProjection(cashflowStore),
+  projectedStreamReader,
+);
+
+await projector.run(); // long-running
+```
+
+For tests or scripts, replay events synchronously via the in-memory reader:
+
+```ts
+const reader = new InMemoryProjectedStreamReader(...);
+const projection = new CashflowProjection(cashflowStore);
+
+for await (const event of reader.read(stream, { from: "start" })) {
+  await projection.handle(event);
+}
+```
+
+## Read models
+
+A projection writes its results to a regular `Store<T>` — anything you can
+load and save. The read model itself doesn't know it was built from events;
+queries against it are plain store reads with no replay.
+
+That separation is what gives you CQRS without ceremony: the write path is
+event-sourced, the read path is a normal materialized view, and the bridge is
+the projection plus the projector.

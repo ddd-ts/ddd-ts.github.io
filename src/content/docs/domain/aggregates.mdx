@@ -1,0 +1,123 @@
+---
+title: Aggregates
+description: Modeling event-sourced aggregates with @ddd-ts/core — events, handlers, and snapshots.
+---
+
+`@ddd-ts/core` provides `EsAggregate(name, config)`, a maker that returns a
+class composed from the `Identifiable`, `Named` and `EventSourced` traits.
+Aggregates are described by:
+
+1. their **name** — a stable identifier used by the registry and the event
+   store;
+2. a list of **events** they can emit;
+3. (optionally) a **state shape** — required for snapshot-based aggregates.
+
+## Without a state shape
+
+The simplest form just declares the events. State lives on the aggregate
+instance and is rebuilt from events on load.
+
+```ts
+import { EsAggregate, EsEvent, On } from "@ddd-ts/core";
+
+export class CounterIncremented extends EsEvent("CounterIncremented", {
+  counterId: String,
+  by: Number,
+}) {}
+
+export class Counter extends EsAggregate("Counter", {
+  events: [CounterIncremented],
+}) {
+  value = 0;
+
+  static start(counterId: string) {
+    return this.new(CounterIncremented.new({ counterId, by: 0 }));
+  }
+
+  increment(by: number) {
+    this.apply(CounterIncremented.new({ counterId: this.id, by }));
+  }
+
+  @On(CounterIncremented)
+  onIncremented(e: CounterIncremented) {
+    this.value += e.payload.by;
+  }
+}
+```
+
+`this.apply(event)` does two things: appends the event to the aggregate's
+*pending changes* buffer (returned by `aggregate.changes` and persisted by the
+store), and immediately invokes the matching `@On` handler so the in-memory
+state stays consistent.
+
+## With a state shape (snapshottable)
+
+If you also pass `state`, the aggregate becomes a `Shape` — it gains a typed
+constructor and `serialize() / deserialize()`. The store may then snapshot it
+and rebuild from a snapshot + a tail of events instead of replaying the whole
+stream.
+
+```ts
+export class Account extends EsAggregate("Account", {
+  events: [AccountOpened, Deposited, Withdrawn],
+  state: {
+    id: AccountId,
+    balance: Number,
+    createdAt: Date,
+  },
+}) {
+  @On(AccountOpened)
+  static onOpened(e: AccountOpened) {
+    return new Account({
+      id: e.payload.accountId,
+      balance: 0,
+      createdAt: e.payload.at,
+    });
+  }
+
+  @On(Deposited)
+  onDeposited(e: Deposited) { this.balance += e.payload.amount; }
+}
+```
+
+The handler attached to the **creation event** must be `static` and **return**
+the new aggregate instance. Subsequent handlers are instance methods that
+mutate `this`.
+
+## Event handlers
+
+`@On(Event)` registers a method as the handler for `Event`. The handler:
+
+- receives the fully-typed event;
+- runs synchronously;
+- must not have side effects beyond mutating `this`.
+
+Each event in the `events` array must have exactly one `@On` handler. Missing
+handlers throw at load time:
+
+```
+Error: No handler for event Withdrawn on Account
+```
+
+## Identifiers
+
+Aggregates derive `Identifiable`. The `id` property is typed from the `state`
+shape if it has one, otherwise inferred from the creation event payload.
+Identifiers must implement the `Identifier` interface (`serialize()`,
+`toString()`).
+
+## Saving and loading
+
+Aggregates don't know how they're persisted. You hand them to an aggregate
+store, which is paired with an event stream / lake store:
+
+```ts
+const accounts = new (MakeInMemoryEventStreamAggregateStore(Account))(eventStore);
+
+await accounts.save(account);
+const loaded = await accounts.load(account.id);
+```
+
+`save` writes the pending `changes` and clears the buffer. `load` rebuilds the
+aggregate from its stream (and snapshot, if available) and returns `undefined`
+if no events exist for that id.

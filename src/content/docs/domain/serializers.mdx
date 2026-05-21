@@ -1,0 +1,91 @@
+---
+title: Serializers
+description: Versioning event payloads and migrating data with AutoSerializer and the SerializerRegistry.
+---
+
+Persisted events live forever — long after the code that wrote them is gone.
+DDD-TS makes that visible: every event class is paired with at least one
+serializer, and changes to the payload force you to either bump the version
+or write a migration.
+
+## `AutoSerializer`
+
+For events whose payload shape matches its persisted form 1:1, derive a
+serializer from `AutoSerializer(EventClass, version)`:
+
+```ts
+import { AutoSerializer } from "@ddd-ts/core";
+
+class DepositedV1 extends AutoSerializer(Deposited, 1) {}
+```
+
+It implements `ISerializer<Deposited>` using the event's declared shape — no
+boilerplate.
+
+## The `SerializerRegistry`
+
+Stores look up serializers in a registry, keyed by event name and version.
+
+```ts
+import { SerializerRegistry } from "@ddd-ts/core";
+
+const serializers = new SerializerRegistry()
+  .add(Deposited,   new DepositedV1())
+  .add(Withdrawn,   new WithdrawnV1())
+  .add(AccountOpened, new AccountOpenedV1());
+```
+
+The registry is passed to every event store and event lake store.
+
+## Versioning a payload
+
+When a payload changes in a way that's *not* backward compatible, do not edit
+the existing serializer. Add a new one with the next version and register
+both:
+
+```ts
+// V1 — what was originally persisted
+class DepositedV1 extends AutoSerializer(Deposited, 1) {}
+
+// V2 — for example, amount is now a Money object instead of a number
+class DepositedV2 implements ISerializer<Deposited> {
+  serialize(e: Deposited) {
+    return {
+      id: e.id.value,
+      accountId: e.payload.accountId.value,
+      amount: { value: e.payload.amount, currency: "EUR" },
+      version: 2,
+    };
+  }
+  deserialize(s: Serialized<this>) {
+    return new Deposited({
+      id: EventId.deserialize(s.id),
+      name: "Deposited",
+      payload: {
+        accountId: AccountId.deserialize(s.accountId),
+        amount: s.amount.value,
+      },
+    });
+  }
+}
+
+serializers.add(Deposited, new DepositedV1()).add(Deposited, new DepositedV2());
+```
+
+The registry stores both — when the event store reads an old event from disk
+it picks the serializer matching the stored `version`. New events are written
+with the highest registered version.
+
+## Catching unsafe changes at compile time
+
+A subtler problem is when a payload change *seems* compatible but isn't —
+adding `| null` to a field, widening a string union, replacing a class with a
+new one that serializes differently. `@ddd-ts/freeze` exists to make those
+changes loud. See [the Freeze guide](/domain/freeze/) for the workflow.
+
+## Snapshots
+
+Snapshottable aggregates (those with a `state` declaration) are themselves
+serializable. Their serializer is auto-derived from the `state` shape — you
+don't need to register one explicitly unless you want a custom on-disk
+representation.

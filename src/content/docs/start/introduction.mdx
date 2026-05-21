@@ -1,0 +1,65 @@
+---
+title: Introduction
+description: What DDD-TS is, what's in the box, and how the packages fit together.
+---
+
+DDD-TS is a collection of small, composable TypeScript libraries for building
+applications around **Domain-Driven Design** and **event sourcing**. It is not
+a framework — there's no application bootstrap, no plugin system, no opinionated
+folder structure. Each package solves one specific problem and is published
+independently, so you can adopt them gradually or pick only the ones you need.
+
+The pieces are organized into three layers:
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Foundations" icon="seti:typescript">
+    Type-level primitives the rest of the toolchain is built on: `@ddd-ts/types`,
+    `@ddd-ts/traits`, and `@ddd-ts/shape`.
+  </Card>
+  <Card title="Domain core" icon="puzzle">
+    `@ddd-ts/core` — aggregates, events, projections, serializers and the
+    transactional `Store` and `EventStore` contracts.
+  </Card>
+  <Card title="Infrastructure adapters" icon="open-book">
+    Implementations of the contracts on top of in-memory data structures,
+    Cloud Firestore and (soon) EventStoreDB.
+  </Card>
+</CardGrid>
+
+## At a glance
+
+| Package | Role |
+| --- | --- |
+| [`@ddd-ts/types`](/foundations/types/)        | Tiny shared utility types (`Constructor`, `AbstractConstructor`). |
+| [`@ddd-ts/traits`](/foundations/traits/)      | A typesafe trait / mixin system. |
+| [`@ddd-ts/shape`](/foundations/shape/)        | Declarative schemas: validation, parsing and serialization. |
+| [`@ddd-ts/core`](/domain/aggregates/)         | Event-sourced aggregates, projections and the `Store` contract. |
+| [`@ddd-ts/freeze`](/domain/freeze/)           | A `freeze()` helper + CLI that pins serialized shapes to detect breaking changes. |
+| [`@ddd-ts/store-inmemory`](/stores/in-memory/)        | In-memory `Store` and `TransactionPerformer` for tests. |
+| [`@ddd-ts/store-firestore`](/stores/firestore/)       | Cloud Firestore implementation of the `Store` contract. |
+| [`@ddd-ts/event-sourcing-inmemory`](/event-sourcing/in-memory/)   | In-memory event streams, lakes and projected streams. |
+| [`@ddd-ts/event-sourcing-firestore`](/event-sourcing/firestore/) | Firestore-backed event streams, lakes and async projectors. |
+| [`@ddd-ts/event-sourcing-esdb`](/event-sourcing/esdb/)           | EventStoreDB adapter (work in progress). |
+
+## What "domain-driven toolchain" means
+
+Each library is built around a small contract — `Store`, `EventStreamStore`,
+`ProjectedStream`, `ISerializer` — and ships at least one reference
+implementation. Your domain code targets the contracts, never the concrete
+infrastructure. That separation is what lets you:
+
+- write the whole domain against the in-memory adapters and run the test suite
+  in seconds, then swap in Firestore in production without rewriting a line of
+  domain code;
+- introduce event sourcing on a single aggregate without committing the rest of
+  the application to it;
+- evolve event shapes safely thanks to `@ddd-ts/freeze`, which fails the build
+  when a serialized payload would change in a way that breaks old data.
+
+## Where to go next
+
+- [Installation](/start/installation/) — picking the right combination of packages.
+- [Quickstart](/start/quickstart/) — a 60-line event-sourced aggregate.
+- [Philosophy](/start/philosophy/) — the trade-offs behind the design.

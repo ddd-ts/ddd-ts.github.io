@@ -1,0 +1,443 @@
+/* Splash homepage — replicates the Figma comp.
+ *
+ * The splash is identified by `data-has-hero` on <html>, set by Starlight when
+ * the page frontmatter declares a `hero` block. We hide all of Starlight's
+ * chrome on this page so the hero owns the full viewport.
+ */
+
+/* ------------------------------------------------------------------ *
+ *  Splash-only resets                                                 *
+ * ------------------------------------------------------------------ */
+
+html[data-has-hero] header.header,
+html[data-has-hero] .page > header,
+html[data-has-hero] nav.sidebar,
+html[data-has-hero] aside.right-sidebar,
+html[data-has-hero] mobile-starlight-toc {
+  display: none !important;
+}
+
+/* No scroll on the splash at desktop sizes — the hero fits the viewport and
+   the glow's blurred icons would otherwise leak past the bottom edge and
+   force the page to grow. Below the stacked-layout breakpoint the content
+   needs to scroll, so we only apply the lock at desktop widths. */
+@media (min-width: 961px) {
+  html[data-has-hero],
+  html[data-has-hero] body {
+    overflow: hidden;
+    height: 100vh;
+  }
+}
+
+/* Strip the content panel chrome on the splash so the hero owns the canvas. */
+html[data-has-hero] {
+  --sl-content-width: 100%;
+  --sl-content-margin-inline: 0;
+}
+html[data-has-hero] .main-frame,
+html[data-has-hero] .main-pane,
+html[data-has-hero] main,
+html[data-has-hero] .content-panel,
+html[data-has-hero] .content-panel > .sl-container,
+html[data-has-hero] .sl-markdown-content {
+  padding: 0;
+  margin: 0;
+  border: none;
+  max-width: none;
+  width: 100%;
+}
+
+/* Starlight wraps every page in `.page` with a CSS grid that reserves columns
+ * for the sidebar / TOC. Collapse that to a single column on the splash. */
+html[data-has-hero] .page {
+  display: block;
+  grid-template-columns: none;
+  --sl-content-margin-inline: 0;
+}
+
+html[data-has-hero] main {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: none;
+}
+
+/* Starlight's default hero block — we render our own. */
+html[data-has-hero] .hero {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Hero layout                                                        *
+ * ------------------------------------------------------------------ */
+
+.ddd-hero {
+  /* Fluid horizontal padding follows the viewport so the layout stays
+     balanced from 360px up to ultra-wide screens. */
+  --hero-pad-x: clamp(1.5rem, 6vw, 6rem);
+  --hero-pad-y: clamp(2rem, 6vh, 5rem);
+
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: clamp(2rem, 6vw, 6rem);
+  align-items: stretch;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: var(--hero-pad-y) var(--hero-pad-x);
+  /* Fill at least one screen, but cap the content so very tall viewports
+     don't blow the composition up. */
+  min-height: min(100vh, 900px);
+  max-height: 1000px;
+  color: var(--ddd-fg);
+}
+
+/* Center the splash vertically on very tall viewports so the unused space
+   sits above and below evenly. */
+html[data-has-hero] body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* The glow is the Kraaft mark itself, used as a colored light source.
+ * Two stacked, heavily-blurred copies of the brand icon — same trick as the
+ * Figma node 117:2: the colors of the glow come from the brand, not random
+ * radial gradients. The block lives inside .ddd-hero__built so it always
+ * stays centered on the Kraaft logo.
+ *
+ * Figma reference values:
+ *   ::before — 486px, blur 75px, opacity 0.19, rotate 17.87deg
+ *   ::after  — 458px, blur 62px, opacity 0.07, rotate 107.87deg
+ */
+/* The glow is the Kraaft mark itself, used as a colored light source.
+ * Two heavily-blurred copies of the brand icon stacked at slightly
+ * different positions, just like Figma node 117:2:
+ *
+ *   - ::before — the larger, brighter core (75px blur, opacity 0.22)
+ *   - ::after  — a smaller secondary blob (62px blur, opacity 0.09),
+ *                rotated 90° from the core and shifted ~122px right and
+ *                ~89px up from it. The shift + rotation give the overall
+ *                glow an organic asymmetric shape and cover the hollow
+ *                center of the kraaft mark with the second copy's solid
+ *                area.
+ *
+ * The base anchor of the whole glow shifts between viewport sizes:
+ *   - normal viewports: anchor biased down-and-left of the Kraaft logo so
+ *     the bright peak sits in the bottom-left of the splash, reading as
+ *     light bleeding in from the corner.
+ *   - ≥1400px (wide screens, .ddd-hero is centered with side margins): the
+ *     anchor snaps onto the Kraaft logo, matching the Figma comp exactly.
+ *
+ * Offsets between the two layers are kept in absolute px (matching Figma)
+ * so the shape stays consistent regardless of viewport size; only the
+ * group's anchor moves.
+ */
+.ddd-hero__glow {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.ddd-hero__glow::before,
+.ddd-hero__glow::after {
+  content: "";
+  position: absolute;
+  background-image: url("/kraaft-mark.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  transform-origin: center;
+}
+
+/* Core layer — anchored at the corner-biased position. */
+.ddd-hero__glow::before {
+  width: clamp(22rem, 38vw, 38rem);
+  height: clamp(22rem, 38vw, 38rem);
+  left: 0;
+  top: 50%;
+  transform: translate(-60%, -20%) rotate(17.87deg);
+  filter: blur(75px);
+  opacity: 0.22;
+}
+
+/* Secondary layer — shifted +122px right and -89px up from the core, and
+   rotated 90° further so its bright area covers the core's transparent
+   middle. The shift values mirror Figma node 117:2 (≈ +122 / -89 px). */
+.ddd-hero__glow::after {
+  width: clamp(20rem, 34vw, 34rem);
+  height: clamp(20rem, 34vw, 34rem);
+  left: 0;
+  top: 50%;
+  transform: translate(calc(-60% + 122px), calc(-20% - 89px)) rotate(107.87deg);
+  filter: blur(62px);
+  opacity: 0.10;
+}
+
+/* Big screens — the .ddd-hero is centered with margins, so the viewport's
+   corner is outside the layout. Snap the group back onto the logo center
+   while preserving the same +122/-89 offset between layers. */
+@media (min-width: 1400px) {
+  .ddd-hero__glow::before {
+    transform: translate(-50%, -50%) rotate(17.87deg);
+  }
+  .ddd-hero__glow::after {
+    transform: translate(calc(-50% + 122px), calc(-50% - 89px)) rotate(107.87deg);
+  }
+}
+
+.ddd-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Left column — title, tagline, CTAs, partners                       *
+ * ------------------------------------------------------------------ */
+
+.ddd-hero__left {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  min-height: 0;
+}
+
+.ddd-hero__title {
+  font-family: "Monor", serif;
+  font-weight: 700;
+  /* Scales fluidly between 3rem and 4.5rem depending on viewport width. */
+  font-size: clamp(3rem, 5.2vw, 4.5rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--ddd-fg);
+}
+
+.ddd-hero__tagline {
+  font-family: "Supreme", var(--sl-font);
+  font-weight: 200;
+  font-size: clamp(1.25rem, 2.2vw, 2rem);
+  line-height: 1.2;
+  color: var(--ddd-fg-muted);
+  margin: 0;
+  max-width: 26ch;
+}
+
+.ddd-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(1.25rem, 3vw, 2.25rem);
+  flex-wrap: wrap;
+}
+
+.ddd-hero__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.5rem;
+  border-radius: 4px;
+  font-family: "Supreme", var(--sl-font);
+  font-weight: 400;
+  font-size: clamp(1rem, 1.4vw, 1.25rem);
+  line-height: 1;
+  color: var(--ddd-fg) !important;
+  background: linear-gradient(172deg, #1d1d1d 6.3%, #1f1f1f 54.18%, #242424 97.73%);
+  box-shadow:
+    0 1px 4px -1px rgba(0, 0, 0, 0.1),
+    0 6px 14px -2px rgba(0, 0, 0, 0.2),
+    0 12px 24px -6px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ddd-hero__cta:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 6px -1px rgba(0, 0, 0, 0.18),
+    0 10px 22px -2px rgba(0, 0, 0, 0.28),
+    0 18px 34px -8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+}
+
+.ddd-hero__cta--ghost {
+  background: transparent;
+  box-shadow: none;
+  padding: 0.875rem 0.25rem;
+}
+
+.ddd-hero__cta--ghost:hover {
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.ddd-hero__cta svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.ddd-hero__built {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  /* Pushed to the bottom of the left column to mirror the Figma comp where
+     the "Built and used at" block sits just above the hero's bottom edge. */
+  margin-top: auto;
+}
+
+/* Keep the label + Kraaft logo on top of the glow's blurred icons. */
+.ddd-hero__built > *:not(.ddd-hero__glow) {
+  position: relative;
+  z-index: 1;
+}
+
+.ddd-hero__built-label {
+  font-family: "Supreme", var(--sl-font);
+  font-weight: 500;
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ddd-fg-dim);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Right column — feature cards                                       *
+ * ------------------------------------------------------------------ */
+
+.ddd-hero__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Equal-height rows that fill the column so the grid stays square-ish. */
+  grid-auto-rows: 1fr;
+  gap: clamp(1rem, 2vw, 1.5rem);
+  align-self: stretch;
+}
+
+.ddd-hero__card {
+  --card-pad: clamp(1.5rem, 2.4vw, 2.25rem);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.75rem, 1.4vw, 1.25rem);
+  /* Min height so each tile breathes even at narrower widths. */
+  min-height: clamp(15rem, 30vh, 22rem);
+  padding: var(--card-pad);
+  border-radius: 16px;
+  background: linear-gradient(149deg, #1d1d1d 6.3%, #1f1f1f 54.18%, #242424 97.73%);
+  box-shadow:
+    0 2px 8px -1px rgba(0, 0, 0, 0.1),
+    0 12px 28px -4px rgba(0, 0, 0, 0.2),
+    0 24px 48px -12px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  text-decoration: none;
+  color: var(--ddd-fg) !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  overflow: hidden;
+}
+
+.ddd-hero__card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 12px -1px rgba(0, 0, 0, 0.18),
+    0 18px 38px -4px rgba(0, 0, 0, 0.32),
+    0 32px 60px -12px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+}
+
+.ddd-hero__card-icon {
+  width: clamp(28px, 3vw, 32px);
+  height: clamp(28px, 3vw, 32px);
+  color: var(--ddd-fg);
+  display: inline-flex;
+}
+
+.ddd-hero__card-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ddd-hero__card-title {
+  font-family: "Supreme", var(--sl-font);
+  font-weight: 500;
+  font-size: clamp(1.125rem, 1.6vw, 1.5rem);
+  line-height: 1.15;
+  color: var(--ddd-fg);
+  margin: 0;
+}
+
+.ddd-hero__card-body {
+  font-family: "Supreme", var(--sl-font);
+  font-weight: 200;
+  font-size: clamp(0.95rem, 1.3vw, 1.25rem);
+  line-height: 1.35;
+  color: var(--ddd-fg-muted);
+  margin: 0;
+}
+
+.ddd-hero__card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  align-self: flex-end;
+  font-family: "Supreme", var(--sl-font);
+  font-weight: 400;
+  font-size: clamp(0.875rem, 1vw, 1rem);
+  color: var(--ddd-fg-muted);
+}
+
+.ddd-hero__card-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Responsive                                                         *
+ * ------------------------------------------------------------------ */
+
+/* Stack the layout once the two-column grid would crowd the cards. */
+@media (max-width: 960px) {
+  .ddd-hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .ddd-hero__left {
+    gap: 1.5rem;
+  }
+
+  .ddd-hero__actions {
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+  }
+
+  .ddd-hero__cards {
+    grid-auto-rows: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .ddd-hero__cards {
+    grid-template-columns: 1fr;
+  }
+
+  .ddd-hero__card {
+    min-height: 14rem;
+  }
+
+  .ddd-hero__glow {
+    width: 24rem;
+    opacity: 0.4;
+  }
+}

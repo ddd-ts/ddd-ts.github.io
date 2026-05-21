@@ -1,0 +1,170 @@
+/*
+ * Wire DDD-TS typography and palette into Starlight's design tokens so the
+ * docs pages live in the same dark, branded world as the splash homepage.
+ *
+ * Starlight is locked to its dark theme — the brand is dark, light mode would
+ * fight the gradients on the splash and read as a separate product.
+ */
+
+html {
+  /* Disable the light/dark toggle by pinning dark-mode tokens. */
+  color-scheme: dark;
+}
+
+:root,
+:root[data-theme="dark"],
+:root[data-theme="light"] {
+  --sl-font: "Supreme", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Brand surfaces */
+  --ddd-bg-from: #141414;
+  --ddd-bg-to: #171717;
+  --ddd-surface: #1d1d1d;
+  --ddd-surface-soft: #242424;
+  --ddd-fg: #fafafa;
+  --ddd-fg-muted: #e1e1e1;
+  --ddd-fg-dim: rgba(255, 255, 255, 0.5);
+  --ddd-border: rgba(255, 255, 255, 0.07);
+
+  /* Starlight color tokens — overridden so the docs share the splash palette. */
+  --sl-color-bg: var(--ddd-bg-from);
+  --sl-color-bg-nav: rgba(20, 20, 20, 0.7);
+  --sl-color-bg-sidebar: var(--ddd-bg-from);
+  --sl-color-bg-inline-code: rgba(255, 255, 255, 0.06);
+
+  --sl-color-text: var(--ddd-fg-muted);
+  --sl-color-text-accent: #ffd738;
+  --sl-color-text-invert: #141414;
+
+  --sl-color-white: #fafafa;
+  --sl-color-gray-1: #ededed;
+  --sl-color-gray-2: #c2c2c2;
+  --sl-color-gray-3: #8b8b8b;
+  --sl-color-gray-4: #585858;
+  --sl-color-gray-5: #2f2f2f;
+  --sl-color-gray-6: #1d1d1d;
+  --sl-color-black: #141414;
+
+  --sl-color-accent-low: #2d3a5a;
+  --sl-color-accent: #385cff;
+  --sl-color-accent-high: #b5c3ff;
+
+  --sl-color-hairline: rgba(255, 255, 255, 0.08);
+  --sl-color-hairline-light: rgba(255, 255, 255, 0.05);
+  --sl-color-hairline-shade: rgba(255, 255, 255, 0.04);
+}
+
+/* Apply the splash gradient across the whole site so docs pages share the
+   same warm dark surface — not just the splash. */
+html,
+body {
+  background: linear-gradient(141deg, var(--ddd-bg-from) 16.83%, var(--ddd-bg-to) 76.02%) fixed;
+  color: var(--ddd-fg-muted);
+}
+
+/* Site title in the docs header uses the display serif, matching the splash.
+   The selector chain has to outweigh Starlight's scoped style which sets
+   `font-family: var(--sl-font)` on `.site-title`. */
+header.header a.site-title,
+header.header a.site-title > span,
+.page > header a.site-title,
+.page > header a.site-title > span {
+  font-family: "Monor", serif !important;
+  font-weight: 700;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  color: var(--ddd-fg);
+}
+
+/* Headings stay in Supreme but at heavier weight so they read clearly. */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.sl-markdown-content h4,
+.sl-markdown-content h5,
+.sl-markdown-content h6 {
+  font-family: "Supreme", var(--sl-font);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ddd-fg);
+}
+
+/* The page title (Starlight's H1) leans on the display serif — it's the
+   strongest connection to the splash hero on every docs page. */
+.content-panel h1#_top {
+  font-family: "Monor", serif;
+  font-weight: 700;
+  font-size: clamp(2.5rem, 4vw, 3.25rem);
+  letter-spacing: -0.02em;
+  margin-bottom: 1.5rem;
+}
+
+/* Header chrome: lift the brand on top of the dark gradient. */
+header.header {
+  background: rgba(20, 20, 20, 0.7);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+/* Sidebar: blend with the background instead of forming a hard column. */
+nav.sidebar,
+aside.right-sidebar {
+  background: transparent;
+}
+
+/* Social icons in the header — links inherit accent color by default, which
+   in our palette is yellow. The brand calls for them to stay white. */
+header.header .social-icons a,
+header.header .social-icons a:hover,
+header.header .social-icons a:focus {
+  color: var(--ddd-fg);
+}
+
+/* Theme switcher — keep the markup intact for when we add a light mode, but
+   hide it for now: the brand is dark-only. */
+header.header starlight-theme-select {
+  display: none;
+}
+
+/* Cards used in docs (Starlight's <Card />) inherit the splash surface look. */
+.sl-markdown-content .card,
+.sl-markdown-content starlight-card,
+.sl-markdown-content :where(.sl-card) {
+  background: linear-gradient(
+    149deg,
+    #1d1d1d 6.3%,
+    #1f1f1f 54.18%,
+    #242424 97.73%
+  );
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 14px;
+  box-shadow:
+    0 2px 8px -1px rgba(0, 0, 0, 0.1),
+    0 12px 28px -4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Inline code and code blocks pick up the same surface tone. */
+.sl-markdown-content :not(pre) > code {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  color: var(--ddd-fg);
+}
+
+/* Tables in docs — make them readable on dark. */
+.sl-markdown-content table {
+  border-color: var(--sl-color-hairline);
+}
+.sl-markdown-content th,
+.sl-markdown-content td {
+  border-color: var(--sl-color-hairline);
+}
+.sl-markdown-content thead {
+  background: rgba(255, 255, 255, 0.03);
+}

@@ -1,0 +1,77 @@
+---
+title: "@ddd-ts/store-inmemory"
+description: In-memory Store and TransactionPerformer for tests and local development.
+---
+
+`@ddd-ts/store-inmemory` is the reference implementation of the
+[`Store` / `TransactionPerformer`](/stores/overview/) contracts. It is the
+adapter you use in test suites and during local development — fast, no setup,
+no external service.
+
+## Installation
+
+```sh
+pnpm add -D @ddd-ts/store-inmemory
+```
+
+## Building a store
+
+```ts
+import {
+  InMemoryDatabase,
+  InMemoryStore,
+  InMemoryTransactionPerformer,
+} from "@ddd-ts/store-inmemory";
+
+const db = new InMemoryDatabase();
+const transactions = new InMemoryTransactionPerformer(db);
+
+class CashflowStore extends InMemoryStore<Cashflow> {
+  constructor() { super("cashflow", db, new CashflowSerializer()); }
+}
+
+const cashflows = new CashflowStore();
+```
+
+`InMemoryStore<T>` takes a collection name (used as a namespace within the
+database), the database, and an `ISerializer<T>`. The serializer turns your
+domain object into a plain JSON value before it's stored in the in-memory
+map, which means the same code path is exercised as in production.
+
+## Transactions
+
+`InMemoryTransactionPerformer` simulates an optimistic transaction model
+matching what production stores like Firestore enforce. Reads happen against
+a snapshot of the database; writes are buffered; on commit, the performer
+checks that every key the transaction read still has the expected revision.
+
+If two transactions touch the same key concurrently, the second one to commit
+throws `ConcurrencyError`. The fake performer retries automatically up to a
+small limit:
+
+```ts
+import { FakeInMemoryTransactionPerformer } from "@ddd-ts/store-inmemory";
+
+const transactions = new FakeInMemoryTransactionPerformer(db);
+// Auto-retries on ConcurrencyError up to 3 times before throwing.
+```
+
+Use the strict `InMemoryTransactionPerformer` in tests when you want to
+*assert* on concurrency conflicts; use the fake one when you just want your
+test fixtures to work without flake.
+
+## Reading after writing
+
+A common gotcha in transactional stores: reading the value you just wrote
+inside the same transaction. The in-memory store enforces the same rule as
+Firestore — you cannot read a key after writing to it in the same transaction.
+Doing so throws `CannotReadAfterWrites`, which mirrors the production error.
+
+## Resetting between tests
+
+```ts
+beforeEach(() => db.clear());
+```
+
+`InMemoryDatabase.clear()` wipes every collection. Pair it with `beforeEach`
+in your test runner of choice.

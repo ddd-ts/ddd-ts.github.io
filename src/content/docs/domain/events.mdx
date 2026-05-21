@@ -1,0 +1,82 @@
+---
+title: Events
+description: Defining event types, payloads and IDs with @ddd-ts/core's EsEvent maker.
+---
+
+Events are the unit of persistence in an event-sourced system. `@ddd-ts/core`
+defines them with `EsEvent(name, payload)` — a maker that returns a class
+composed from the `Named` and `Shaped` traits.
+
+## Declaring an event
+
+```ts
+import { EsEvent } from "@ddd-ts/core";
+
+export class Deposited extends EsEvent("Deposited", {
+  accountId: AccountId,
+  amount: Number,
+}) {}
+```
+
+The `payload` argument is a `@ddd-ts/shape` `DictShorthand`. You get the same
+declarative power as a regular shape: nested classes, optional fields,
+discriminated unions, mappings.
+
+## Instantiating
+
+Use the static `new(payload)` helper. It auto-generates an `id` and (later)
+fills in a `revision` and `occurredAt` when the event is written.
+
+```ts
+const e = Deposited.new({ accountId: account.id, amount: 100 });
+
+e.payload.amount; // typed: number
+e.id;             // EventId
+e.name;           // "Deposited"
+```
+
+You almost never construct events directly — aggregates do, via
+`this.apply(EventClass.new(...))`.
+
+## The event metadata
+
+Every event has a fixed set of fields on top of its payload:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | The event type name, used by serializers. |
+| `id` | `EventId` | Generated UUID, stable across retries. |
+| `payload` | inferred from declaration | The domain-meaningful data. |
+| `revision` | `bigint` (optional) | Position in the stream — set on write. |
+| `occurredAt` | `MicrosecondTimestamp` (optional) | Wall-clock time, set on write. |
+| `ref` | `string` (optional) | Free-form correlation ref. |
+
+`revision` and `occurredAt` are `Optional(...)` in the declaration so an
+event freshly created by `EsEvent.new(...)` does not need them. They are
+populated when the event is appended to a stream.
+
+## Serializers
+
+Persisted events must declare a serializer so the store knows the on-disk
+format. The simplest form is `AutoSerializer`, which serializes the payload
+according to its declared shape:
+
+```ts
+import { AutoSerializer } from "@ddd-ts/core";
+
+class DepositedSerializer extends AutoSerializer(Deposited, 1) {}
+```
+
+The second argument is the **version**. When you change the payload shape in
+an incompatible way, bump the version and add a new serializer class — the
+[Serializers guide](/domain/serializers/) walks through versioned
+serializers and migrations.
+
+## Naming guidelines
+
+- Event names are past-tense facts: `AccountOpened`, `Deposited`,
+  `OrderShipped`. They describe something that *has happened*.
+- Names are globally unique within a serializer registry — you can have a
+  `Deposited` event for an `Account` and one for an `Envelope`, but they will
+  collide in the same registry. Prefix them when in doubt
+  (`AccountDeposited`).

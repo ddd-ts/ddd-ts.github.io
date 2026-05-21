@@ -1,0 +1,13 @@
+/* The brand @font-face declarations live in an inline <style> emitted from
+ * astro.config.mjs so they apply during the first HTML parse — before any
+ * external stylesheet is fetched. Re-declaring them here would cause Vite's
+ * dev-mode HMR to inject the same @font-face a second time, which makes
+ * Chromium re-resolve the font on every CSS injection and produces a brief
+ * "blink" on page load.
+ *
+ * The only thing this stylesheet now ships is the mono import. */
+
+/* Mono — JetBrains Mono from Google Fonts. `display=block` matches the
+ * brand fonts so code blocks don't flash between fallback and the real
+ * mono font. Easy to swap once a different mono is chosen. */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=block");

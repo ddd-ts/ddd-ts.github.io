@@ -1,0 +1,94 @@
+---
+title: Event sourcing contracts
+description: The event stream, event lake and projected stream contracts that all adapters implement.
+---
+
+Event sourcing in DDD-TS revolves around three contracts, all defined in
+`@ddd-ts/core`. Every infrastructure adapter (in-memory, Firestore, ESDB)
+implements them and passes the same shared test suite.
+
+## `EventStreamStore`
+
+A single stream of events, keyed by aggregate id. Reads return events in
+append order; writes are conditional on the current revision (optimistic
+concurrency control).
+
+```ts
+interface EventStreamStore {
+  append(streamId: StreamId, events: IChange[], expected: bigint): Promise<ISavedChange[]>;
+  read(streamId: StreamId, from?: bigint): AsyncIterable<IFact>;
+  // ...
+}
+```
+
+This is what aggregate stores use under the hood. There is one logical stream
+per aggregate instance — e.g. `Account/abc-123` — and the stream's events
+*are* the aggregate's history.
+
+## `EventLakeStore`
+
+An append-only log of events shared across many aggregates of the same type.
+Lakes are useful when you don't need per-instance streams (think audit logs,
+domain events emitted from non-aggregate processes) or as a coarse-grained
+ordering primitive for projections that span instances.
+
+```ts
+interface EventLakeStore {
+  append(lakeId: LakeId, events: IChange[]): Promise<ISavedChange[]>;
+  read(lakeId: LakeId, from?: bigint): AsyncIterable<IFact>;
+}
+```
+
+Lake writes don't take an expected revision — they're unconditional appends.
+Concurrent appends to the same lake are serialized by the underlying store.
+
+## `ProjectedStreamReader`
+
+A reader that yields events from one or more `StreamSource`s and / or
+`LakeSource`s in append order. This is what projections consume.
+
+```ts
+class ProjectedStream {
+  constructor(...sources: (StreamSource<…> | LakeSource<…>)[]);
+}
+
+interface ProjectedStreamReader {
+  read(stream: ProjectedStream, opts?: { from?: Cursor }): AsyncIterable<IFact>;
+}
+```
+
+A reader does *not* maintain a checkpoint — checkpointing is the projector's
+responsibility. The reader is stateless: it answers "give me events from
+this position".
+
+## Aggregate stores
+
+On top of the event store, each adapter exposes a "make an aggregate store"
+helper:
+
+```ts
+const AccountStore = MakeInMemoryEventStreamAggregateStore(Account);
+const accounts = new AccountStore(eventStore, serializers);
+```
+
+The resulting store has `save(aggregate)` and `load(id)` methods that:
+
+- on save, append the aggregate's pending `changes` to its stream (with the
+  current revision as the optimistic guard) and clear the buffer;
+- on load, read the stream from a snapshot (if any) and replay events
+  through the `@On(Event)` handlers.
+
+For event-lake-backed aggregates, the same pattern exists via
+`MakeInMemoryEventLakeAggregateStore` / `MakeFirestoreEventLakeAggregateStore`.
+
+## Picking streams vs lakes
+
+| If you... | Use |
+| --- | --- |
+| have one writer per aggregate instance and need to enforce per-instance invariants | **EventStream** |
+| want every aggregate's history isolated, indexed, snapshottable | **EventStream** |
+| want a single global log of facts of the same type | **EventLake** |
+| have many tiny aggregates and would create excessive empty streams | **EventLake** |
+
+Most real applications use streams for the write side and project both
+streams and lakes into the same read model when needed.

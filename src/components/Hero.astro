@@ -1,0 +1,85 @@
+---
+import PhStack from "./icons/PhStack.astro";
+import PhTreeStructure from "./icons/PhTreeStructure.astro";
+import PhCurlyBraces from "./icons/PhCurlyBraces.astro";
+import PhArrowsHorizontal from "./icons/PhArrowsHorizontal.astro";
+import PhBookOpen from "./icons/PhBookOpen.astro";
+import PhGithubLogo from "./icons/PhGithubLogo.astro";
+import PhArrowRight from "./icons/PhArrowRight.astro";
+import KraaftLogo from "./KraaftLogo.astro";
+
+const cards = [
+  {
+    icon: PhStack,
+    title: "Event sourcing primitives",
+    body: "Build aggregates, streams and projections on top of append-only event logs.",
+    href: "/event-sourcing/overview/",
+  },
+  {
+    icon: PhTreeStructure,
+    title: "Projection-driven architecture",
+    body: "Materialize optimized read models from asynchronous event streams.",
+    href: "/domain/projections/",
+  },
+  {
+    icon: PhCurlyBraces,
+    title: "Typed shapes & serializers",
+    body: "Describe domain values once; get parsing, validation and serialization for free.",
+    href: "/foundations/shape/",
+  },
+  {
+    icon: PhArrowsHorizontal,
+    title: "Composable traits",
+    body: "Mix small, type-safe behaviours into aggregates instead of deep inheritance trees.",
+    href: "/foundations/traits/",
+  },
+];
+---
+
+<section class="ddd-hero">
+  <div class="ddd-hero__left">
+    <h1 class="ddd-hero__title">DDD&#8209;TS</h1>
+    <p class="ddd-hero__tagline">
+      The domain-driven toolchain for TypeScript.
+    </p>
+
+    <div class="ddd-hero__actions">
+      <a class="ddd-hero__cta" href="/start/introduction/">
+        <PhBookOpen />
+        <span>Documentation</span>
+      </a>
+      <a
+        class="ddd-hero__cta ddd-hero__cta--ghost"
+        href="https://github.com/ddd-ts/monorepo"
+        rel="noopener"
+      >
+        <PhGithubLogo />
+        <span>GitHub</span>
+      </a>
+    </div>
+
+    <div class="ddd-hero__built">
+      <div class="ddd-hero__glow" aria-hidden="true"></div>
+      <span class="ddd-hero__built-label">Built and used at</span>
+      <KraaftLogo />
+    </div>
+  </div>
+
+  <div class="ddd-hero__cards">
+    {
+      cards.map(({ icon: Icon, title, body, href }) => (
+        <a class="ddd-hero__card" href={href}>
+          <div class="ddd-hero__card-icon">
+            <Icon />
+          </div>
+          <h2 class="ddd-hero__card-title">{title}</h2>
+          <p class="ddd-hero__card-body">{body}</p>
+          <span class="ddd-hero__card-link">
+            Learn More
+            <PhArrowRight />
+          </span>
+        </a>
+      ))
+    }
+  </div>
+</section>

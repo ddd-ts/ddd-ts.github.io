@@ -1,0 +1,76 @@
+---
+title: Philosophy
+description: The design choices behind DDD-TS — small contracts, declarative shapes, and end-to-end type safety.
+---
+
+DDD-TS is intentionally narrow. Each package solves one problem; together they
+form a stack you can adopt in pieces.
+
+## Contracts over frameworks
+
+Every infrastructure concern in DDD-TS is split into a **contract** (an
+interface plus a test suite) and one or more **implementations**. Your domain
+code only ever touches the contract.
+
+- `Store<T>` — a transactional key/value collection.
+- `EventStreamStore` / `EventLakeStore` — append-only event logs.
+- `ProjectedStream` — a way to read events filtered for a projection.
+- `TransactionPerformer` — runs a function inside a transaction.
+
+A contract is only worth what its tests are worth, so every contract ships a
+ready-made `Suite` — for example `EventStreamStoreSuite(store)` — that any
+implementation must pass. The in-memory adapters run it in milliseconds; the
+Firestore adapter runs the same suite against a real emulator. That uniform
+test surface is what makes swapping adapters safe.
+
+## Declarative shapes
+
+Domain values, events and projection state are described with `@ddd-ts/shape`.
+A `Shape` declaration gives you, at the type level and the runtime level:
+
+- a fully typed constructor;
+- `serialize()` to a plain JSON value;
+- `deserialize()` from that plain value back to a class instance;
+- exhaustive checks at the boundary, no `any` casts.
+
+The whole point is that the description lives in one place. There is no
+separate DTO, schema or codec file — and there is no runtime cost on the hot
+path because serialization is a straightforward walk of the declared shape.
+
+## Traits, not deep inheritance
+
+Aggregates, events and projections need a few cross-cutting capabilities:
+identifiability, named types, applying events, and so on. Instead of a deep
+class hierarchy, `@ddd-ts/traits` lets you compose these as small **traits**:
+
+```ts
+class Account extends Derive(Identifiable(), Named("Account"), EventSourced([…])) {}
+```
+
+Each trait is a single function that mixes its capability into a base class.
+The type system checks at compile time that traits with prerequisites
+(`Subtrait`) only apply on top of compatible bases — no hidden runtime
+contracts.
+
+## End-to-end type safety
+
+The biggest design constraint is: **if it compiles, it can be persisted.**
+
+- Event payloads are inferred from their `EsEvent` declaration. You cannot
+  emit an event whose payload doesn't match.
+- Serializers are checked against the shape they serialize, both ways.
+- Projections declare the events they handle; the `@On(Event)` decorator
+  enforces that every declared event has a matching handler.
+- `@ddd-ts/freeze` turns the serialized shape of any class into a literal
+  type checked at build time, so a future refactor that would silently widen a
+  payload (e.g. changing `string` to `string | null`) becomes a compile error
+  instead of a production bug.
+
+## Small surface, no magic
+
+DDD-TS does **not** ship: a dependency injection container, a CLI scaffolding
+generator, a routing layer, an HTTP/GraphQL adapter, a saga orchestrator (yet),
+or a built-in logging system. Those choices belong to your application. The
+toolchain stops at the boundary between your domain and the outside world,
+which keeps it usable in any kind of host: a Lambda, a long-running server, a
+Cloud Function, a worker.

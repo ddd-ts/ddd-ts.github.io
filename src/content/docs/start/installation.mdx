@@ -1,0 +1,82 @@
+---
+title: Installation
+description: How to install the DDD-TS packages and choose the right combination for your project.
+---
+
+DDD-TS is split into independently versioned packages so you only pull in what
+you actually use. Most apps need at least `@ddd-ts/core` plus one infrastructure
+adapter.
+
+## Foundations
+
+These packages have no infrastructure dependencies — install them as soon as
+you start modeling your domain.
+
+```sh
+pnpm add @ddd-ts/types @ddd-ts/traits @ddd-ts/shape
+```
+
+## Domain core
+
+The aggregate, event and projection primitives live in `@ddd-ts/core`. It
+pulls the foundations in transitively, so you can install just this package if
+you're starting fresh:
+
+```sh
+pnpm add @ddd-ts/core
+```
+
+## Pick a store
+
+`@ddd-ts/core` defines the `Store` and `TransactionPerformer` interfaces; you
+pick an implementation per environment.
+
+```sh
+# In tests and during local development
+pnpm add -D @ddd-ts/store-inmemory
+
+# Production
+pnpm add @ddd-ts/store-firestore firebase-admin
+```
+
+## Pick an event-sourcing adapter
+
+Event streams, event lakes and projected streams have the same
+contract / implementation split. Install the in-memory adapter for tests and
+one (or more) production adapter:
+
+```sh
+pnpm add -D @ddd-ts/event-sourcing-inmemory
+pnpm add @ddd-ts/event-sourcing-firestore
+# soon: @ddd-ts/event-sourcing-esdb
+```
+
+## Optional tooling
+
+```sh
+# Compile-time snapshots of serialized shapes — fails CI on breaking changes
+pnpm add -D @ddd-ts/freeze
+```
+
+## TypeScript configuration
+
+DDD-TS leans heavily on TypeScript's type system. It targets `^5.5` and assumes
+strict mode is enabled.
+
+```jsonc
+// tsconfig.json
+{
+  "compilerOptions": {
+    "strict": true,
+    "useDefineForClassFields": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "moduleResolution": "Bundler",
+    "target": "ES2022"
+  }
+}
+```
+
+`experimentalDecorators` is required for the `@On(Event)` decorator used by
+event-sourced aggregates and projections. `emitDecoratorMetadata` is not
+strictly required, but enables the most ergonomic registration patterns.

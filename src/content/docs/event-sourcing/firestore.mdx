@@ -1,0 +1,105 @@
+---
+title: "@ddd-ts/event-sourcing-firestore"
+description: Production-grade event streams, lakes and projectors on Cloud Firestore.
+---
+
+`@ddd-ts/event-sourcing-firestore` is the Firestore-backed implementation of
+every event sourcing contract — streams, lakes, projected stream readers,
+snapshotter, and an async projector.
+
+## Installation
+
+```sh
+pnpm add @ddd-ts/event-sourcing-firestore firebase-admin
+```
+
+## Event streams
+
+```ts
+import {
+  FirestoreEventStreamStorageLayer,
+  FirestoreEventStreamStore,
+  MakeFirestoreEventStreamAggregateStore,
+} from "@ddd-ts/event-sourcing-firestore";
+
+const storage = new FirestoreEventStreamStorageLayer(firestore);
+const eventStore = new FirestoreEventStreamStore(storage, serializers);
+
+const AccountStore = MakeFirestoreEventStreamAggregateStore(Account);
+const accounts = new AccountStore(eventStore);
+```
+
+Each aggregate stream lives in a Firestore document tree designed for
+append-only writes with optimistic revision checks. Writes are batched
+inside a Firestore transaction so the whole `aggregate.save()` is atomic.
+
+## Event lakes
+
+```ts
+import {
+  FirestoreEventLakeStorageLayer,
+  FirestoreEventLakeStore,
+} from "@ddd-ts/event-sourcing-firestore";
+
+const storage = new FirestoreEventLakeStorageLayer(firestore);
+const lake = new FirestoreEventLakeStore(storage, serializers);
+```
+
+## Projected streams
+
+```ts
+import {
+  FirestoreProjectedStreamStorageLayer,
+  FirestoreProjectedStreamReader,
+} from "@ddd-ts/event-sourcing-firestore";
+
+const reader = new FirestoreProjectedStreamReader(
+  new FirestoreProjectedStreamStorageLayer(firestore, streamStorage, lakeStorage),
+);
+```
+
+The reader supports filtering by event name across both streams and lakes,
+using `FirestoreStreamSourceFilter` and `FirestoreLakeSourceFilter`.
+
+## Snapshots
+
+```ts
+import { FirestoreSnapshotter } from "@ddd-ts/event-sourcing-firestore";
+
+const snapshots = new FirestoreSnapshotter(firestore);
+const AccountStore = MakeFirestoreEventStreamAggregateStore(Account, {
+  snapshotter: snapshots,
+  every: 100,
+});
+```
+
+## Async projector
+
+`FirestoreProjector` is a long-running process that consumes a
+`ProjectedStream`, claims work via a queue collection, and applies events to
+a projection one at a time. It checkpoints after each event so it can
+resume.
+
+```ts
+import { FirestoreProjector } from "@ddd-ts/event-sourcing-firestore";
+
+const projector = new FirestoreProjector(firestore, {
+  projection: new CashflowProjection(cashflowStore),
+  reader: projectedStreamReader,
+  claimerId: ClaimerId.generate(),
+});
+
+await projector.run(); // never returns under normal operation
+```
+
+Multiple projectors can claim work from the same queue — locks are leased,
+released and reclaimed if a worker dies (`AlreadyEnqueuedError` and
+`ProjectorLogger` give you the observability hooks).
+
+## Running the test suite locally
+
+The Firestore adapter is tested against the Google Cloud Firestore emulator,
+spun up via the `docker/docker-compose.yml` that ships with the package. The
+tests use the same `*Suite` functions as the in-memory tests — so if the
+in-memory suite passes for a piece of code, the Firestore suite catches any
+adapter-specific deviation.

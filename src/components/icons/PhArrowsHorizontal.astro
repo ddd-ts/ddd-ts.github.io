@@ -1,0 +1,41 @@
+---
+interface Props {
+  class?: string;
+  size?: number | string;
+}
+
+const { class: className, size = "1em" } = Astro.props;
+---
+
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 256 256"
+  width={size}
+  height={size}
+  class={className}
+  aria-hidden="true"
+>
+  <polyline
+    points="56 96 24 128 56 160"
+    fill="none"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="16"></polyline>
+  <polyline
+    points="200 96 232 128 200 160"
+    fill="none"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="16"></polyline>
+  <line
+    x1="24"
+    y1="128"
+    x2="232"
+    y2="128"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="16"></line>
+</svg>

@@ -1,0 +1,113 @@
+---
+title: "@ddd-ts/shape"
+description: Declarative schemas for domain values — validation, parsing and serialization in one place.
+---
+
+`@ddd-ts/shape` turns a small declaration into a class that knows how to
+construct itself, validate its inputs, and serialize / deserialize to plain
+JSON. It is what powers every event payload, value object and projection state
+in `@ddd-ts/core`.
+
+The design goal is **one place for everything**: no separate DTO, no codec, no
+zod schema. The shape declaration *is* the type and *is* the runtime.
+
+## Primitives and shorthand
+
+A shape can be declared with the built-in constructors and standard primitives:
+
+```ts
+import { Shape, Optional, Dict } from "@ddd-ts/shape";
+
+class Profile extends Shape({
+  name: String,
+  age: Number,
+  avatarUrl: Optional(String),
+}) {}
+
+const p = new Profile({ name: "Ada", age: 207 });
+p.serialize(); // { name: "Ada", age: 207, avatarUrl: undefined }
+Profile.deserialize({ name: "Ada", age: 207 }); // → Profile
+```
+
+The native constructors (`String`, `Number`, `Boolean`, `Date`) are
+auto-mapped to their serialized JSON equivalent.
+
+## Composition
+
+Shapes are themselves valid shape entries — they nest.
+
+```ts
+class Address extends Shape({ city: String, zip: String }) {}
+
+class User extends Shape({
+  name: String,
+  address: Address,
+}) {}
+
+const u = new User({
+  name: "Ada",
+  address: new Address({ city: "London", zip: "NW1" }),
+});
+
+u.serialize(); // { name: "Ada", address: { city: "London", zip: "NW1" } }
+```
+
+## Choices and discriminated unions
+
+```ts
+import { Choice, DiscriminatedUnion } from "@ddd-ts/shape";
+
+class Status extends Choice(["draft", "published", "archived"] as const) {}
+
+class Email extends Shape({ kind: "email", value: String }) {}
+class Sms   extends Shape({ kind: "sms",   value: String }) {}
+
+class Notification extends DiscriminatedUnion("kind", [Email, Sms]) {}
+```
+
+`DiscriminatedUnion` produces a parser whose return type is the narrowed
+member of the union, based on the discriminator value.
+
+## Mappings (typed records)
+
+```ts
+import { Mapping } from "@ddd-ts/shape";
+
+class Translations extends Shape({
+  byLocale: Mapping(String, String), // Record<string, string>
+}) {}
+```
+
+## Inline `Class()`
+
+Sometimes you already have a class that knows how to serialize itself (for
+example, a value object with custom logic). Use `Class(...)` to plug it into a
+shape without re-declaring it:
+
+```ts
+import { Class, Dict } from "@ddd-ts/shape";
+
+class AccountId {
+  constructor(public value: string) {}
+  serialize() { return this.value; }
+  static deserialize(value: string) { return new AccountId(value); }
+}
+
+class Account extends Dict({
+  id: Class(AccountId),
+  balance: Number,
+}) {}
+```
+
+## What you get back
+
+Every shape class has:
+
+- a typed constructor that mirrors the declaration;
+- `serialize()` → plain JSON;
+- `static deserialize(json)` → instance;
+- `static $inline` — the inferred runtime type of the value, useful when
+  declaring helpers around it.
+
+These are the building blocks every `EsEvent`, `EsAggregate.state` and
+`Projection` ultimately reduces to.

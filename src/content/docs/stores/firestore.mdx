@@ -1,0 +1,77 @@
+---
+title: "@ddd-ts/store-firestore"
+description: Cloud Firestore implementation of the Store contract, with strongly typed converters and transactions.
+---
+
+`@ddd-ts/store-firestore` is the production adapter for the
+[`Store` / `TransactionPerformer`](/stores/overview/) contracts. It targets
+Cloud Firestore via the `firebase-admin` SDK and passes the same suite as the
+in-memory adapter, so swapping it in does not change behaviour.
+
+## Installation
+
+```sh
+pnpm add @ddd-ts/store-firestore firebase-admin
+```
+
+## Building a store
+
+```ts
+import { initializeApp, applicationDefault } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import {
+  FirestoreStore,
+  FirestoreTransactionPerformer,
+  DefaultConverter,
+} from "@ddd-ts/store-firestore";
+
+initializeApp({ credential: applicationDefault() });
+const firestore = getFirestore();
+
+const transactions = new FirestoreTransactionPerformer(firestore);
+
+class CashflowStore extends FirestoreStore<Cashflow> {
+  constructor() {
+    super(firestore.collection("cashflow"), new CashflowSerializer());
+  }
+}
+```
+
+`FirestoreStore<T>` takes:
+
+1. a Firestore `CollectionReference`;
+2. an `ISerializer<T>` that knows how to round-trip the domain object;
+3. (optional) a `Converter` if you need a different on-disk representation
+   than what the serializer produces (see `DefaultConverter`).
+
+## Transactions
+
+`FirestoreTransactionPerformer.perform(fn)` opens a Firestore transaction and
+calls `fn(trx)` inside it. The same `trx` value is what every store call uses
+to join the transaction.
+
+```ts
+await transactions.perform(async (trx) => {
+  const cashflow = await cashflows.load(accountId, trx);
+  cashflow?.register(100);
+  if (cashflow) await cashflows.save(cashflow, trx);
+});
+```
+
+Firestore enforces the read-before-write rule strictly: any read after a
+write in the same transaction throws. The in-memory adapter mirrors this, so
+tests catch the violation before production does.
+
+## Concurrency
+
+Conflicts surface as `ConcurrencyError` — same type as in the in-memory
+adapter. You handle them once and the same code works in tests and
+production.
+
+## Bring your own converter
+
+The default converter writes the serializer's JSON output as-is. When you
+need a different on-disk shape (legacy data, denormalized fields,
+timestamps as Firestore `Timestamp` objects), implement your own `Converter`
+and pass it as the third argument to `FirestoreStore`. `DefaultConverter` is
+a useful starting point.

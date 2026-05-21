@@ -1,0 +1,130 @@
+---
+title: "@ddd-ts/traits"
+description: A typesafe trait / mixin system that powers aggregates, events and projections.
+---
+
+`@ddd-ts/traits` is a small library for composing reusable behaviours into
+classes. It's the foundation of `@ddd-ts/core`: an `EsAggregate` is just a
+class deriving the `Identifiable`, `Named` and `EventSourced` traits.
+
+It is also useful on its own when you need mixins with proper TypeScript
+inference.
+
+## Defining a trait
+
+A trait is a function that takes a base class and returns a class extending it.
+Wrap the function in `Trait(...)` so the type system knows it's a trait.
+
+```ts
+import { Trait, Derive } from "@ddd-ts/traits";
+
+const Swim = Trait(
+  (base) =>
+    class extends base {
+      swim() { return "🐟"; }
+    },
+);
+
+const Walk = Trait(
+  (base) =>
+    class extends base {
+      walk() { return "🚶"; }
+    },
+);
+```
+
+`Derive(...traits)` combines them into a regular class you can `extends`:
+
+```ts
+class Frog extends Derive(Swim, Walk) {}
+
+const f = new Frog({});
+f.swim(); // "🐟"
+f.walk(); // "🚶"
+```
+
+`Derive` always passes a single props object to the constructor. Traits that
+don't need any props can ignore it — pass `{}`.
+
+## Traits with constructor parameters
+
+A trait can declare its own props by giving its inner class a constructor.
+`Derive` merges the props of every trait it composes, so the resulting class
+takes the intersection of all the trait params.
+
+```ts
+const Run = Trait(
+  (base) =>
+    class extends base {
+      speed: number;
+      constructor(props: { speed: number }) {
+        super(props);
+        this.speed = props.speed;
+      }
+      run() { return 2 * this.speed; }
+    },
+);
+
+class Athlete extends Derive(Run) {
+  constructor() {
+    super({ speed: 10 });
+  }
+}
+```
+
+If two traits declare the same prop, the type system will require it to be
+compatible across all traits.
+
+## Subtraits — requirements between traits
+
+`Subtrait(superTraits, factory)` declares a trait that may only be applied on
+top of a base that already includes the listed super-traits. The body
+receives the *already-derived* base, so it can call methods from those traits.
+
+```ts
+import { Subtrait } from "@ddd-ts/traits";
+
+const SwimFast = Subtrait([Swim] as const, (base) =>
+  class extends base {
+    swimFast() { return this.swim().repeat(5); }
+  },
+);
+
+class FastFish extends Derive(Swim, SwimFast) {} // ✅
+class FastDog  extends Derive(SwimFast) {}       // ❌ compile error
+```
+
+When the requirements aren't met, `Derive` returns a structural type with
+`error`, `left` and `right` fields pointing at the missing capability — so the
+error message reads like a constraint mismatch, not a generic type wall.
+
+## Composing onto an existing base
+
+If you already have a base class and just want to mix traits into it, use
+`WithDerivations`:
+
+```ts
+import { WithDerivations } from "@ddd-ts/traits";
+
+abstract class BaseEntity {
+  createdAt = new Date();
+}
+
+class User extends WithDerivations(BaseEntity, Identifiable(), Named("User")) {}
+```
+
+## Runtime checks
+
+Traits are also tracked at runtime. `implementsTrait(instance, trait)` returns
+a typed predicate:
+
+```ts
+import { implementsTrait } from "@ddd-ts/traits";
+
+if (implementsTrait(animal, Swim)) {
+  animal.swim();
+}
+```
+
+This is how `@ddd-ts/core` discovers, for example, whether an aggregate is
+snapshottable without forcing every author to opt in with a marker interface.
