@@ -30,7 +30,7 @@ function instantiate<C extends Constructor>(ctor: C): InstanceType<C> {
 
 ## `AbstractConstructor<T, P>`
 
-The same, but for `abstract` classes — they cannot be instantiated, so they
+The same, but for `abstract` classes: they cannot be instantiated, so they
 have a different signature in TypeScript.
 
 ```ts
@@ -39,7 +39,7 @@ export type AbstractConstructor<T = any, P extends any[] = any[]> = abstract new
 ) => T;
 ```
 
-Used by the trait system to accept any base class — abstract or concrete — as
+Used by the trait system to accept any base class (abstract or concrete) as
 the foundation for a trait factory.
 
 ## Why these are extracted

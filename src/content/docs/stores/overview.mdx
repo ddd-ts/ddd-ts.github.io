@@ -1,15 +1,15 @@
 ---
 title: Store contract
-description: The Store and TransactionPerformer contracts — how DDD-TS talks to any backing database.
+description: The Store and TransactionPerformer contracts, and how DDD-TS talks to any backing database.
 ---
 
 DDD-TS keeps its domain code free of database details by funneling every
 persistence operation through two small interfaces, exposed from
 `@ddd-ts/core`:
 
-- `Store<T>` — a transactional key/value collection of a single aggregate
+- `Store<T>`: a transactional key/value collection of a single aggregate
   type.
-- `TransactionPerformer` — runs a callback inside a transaction.
+- `TransactionPerformer`: runs a callback inside a transaction.
 
 Every infrastructure package ships an implementation of these two
 interfaces. The in-memory adapter is the reference one; Firestore (and
@@ -26,7 +26,7 @@ interface Store<T> {
 }
 ```
 
-Stores are aggregate-specific — one store per type. A store is *not* an event
+Stores are aggregate-specific: one store per type. A store is *not* an event
 store; it persists a snapshot of a value (typically a projection's read
 model). Event sourcing has its own contracts, layered on top.
 
@@ -61,7 +61,7 @@ await transactions.perform(async (trx) => {
 ```
 
 Implementations of `TransactionPerformer` also expose a serializer-aware
-`TransactionEffect` API for "do this only if the transaction commits" hooks —
+`TransactionEffect` API for "do this only if the transaction commits" hooks,
 useful for publishing domain events to an outbound bus.
 
 ## ConcurrencyError
@@ -74,6 +74,6 @@ to retry, surface the error, or fold it into a conflict resolution.
 ## Why two interfaces and not one ORM?
 
 This is the smallest surface that lets the domain code stay independent of the
-backing store. Anything richer — change streams, joins, full-text search —
+backing store. Anything richer (change streams, joins, full-text search)
 belongs in a *projection*, not in the store contract. The store is for
 "load this, save that", nothing more.

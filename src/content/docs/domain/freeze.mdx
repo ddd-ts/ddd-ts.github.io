@@ -6,7 +6,7 @@ description: Pin the serialized shape of a class so future refactors can't silen
 `@ddd-ts/freeze` lets you turn the type of any value into a compile-time
 literal that is then committed to your repository. The next time you build the
 project, TypeScript checks that the *current* type still matches the frozen
-one — and fails the build if it doesn't.
+one, and fails the build if it doesn't.
 
 It is the safety net for serialized shapes: event payloads, snapshot states,
 projection read models. Anything that lives on disk.
@@ -58,7 +58,7 @@ the frozen literal becomes a compile error.
 
 ## The `@Freeze` decorator
 
-For shape and event classes, the decorator form is more compact — it freezes
+For shape and event classes, the decorator form is more compact, since it freezes
 the serialized form of every instance method that returns it:
 
 ```ts
@@ -85,11 +85,11 @@ pnpm exec freeze --project ./tsconfig.json --check
 ```
 
 A CI failure means somebody changed a persisted shape without updating its
-snapshot — which is exactly when you want to look at the diff.
+snapshot, which is exactly when you want to look at the diff.
 
 ## When to freeze
 
-- **Always** freeze event serializers — `Serialized<DepositedV1>`, …
+- **Always** freeze event serializers: `Serialized<DepositedV1>`, …
 - Freeze snapshot serializers if you snapshot aggregates.
 - Freeze projection read models whose shape lives on disk.
 

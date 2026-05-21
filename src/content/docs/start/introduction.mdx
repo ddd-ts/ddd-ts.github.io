@@ -5,7 +5,7 @@ description: What DDD-TS is, what's in the box, and how the packages fit togethe
 
 DDD-TS is a collection of small, composable TypeScript libraries for building
 applications around **Domain-Driven Design** and **event sourcing**. It is not
-a framework — there's no application bootstrap, no plugin system, no opinionated
+a framework: there's no application bootstrap, no plugin system, no opinionated
 folder structure. Each package solves one specific problem and is published
 independently, so you can adopt them gradually or pick only the ones you need.
 
@@ -19,7 +19,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
     `@ddd-ts/traits`, and `@ddd-ts/shape`.
   </Card>
   <Card title="Domain core" icon="puzzle">
-    `@ddd-ts/core` — aggregates, events, projections, serializers and the
+    `@ddd-ts/core`: aggregates, events, projections, serializers and the
     transactional `Store` and `EventStore` contracts.
   </Card>
   <Card title="Infrastructure adapters" icon="open-book">
@@ -45,8 +45,8 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## What "domain-driven toolchain" means
 
-Each library is built around a small contract — `Store`, `EventStreamStore`,
-`ProjectedStream`, `ISerializer` — and ships at least one reference
+Each library is built around a small contract (`Store`, `EventStreamStore`,
+`ProjectedStream`, `ISerializer`) and ships at least one reference
 implementation. Your domain code targets the contracts, never the concrete
 infrastructure. That separation is what lets you:
 
@@ -60,6 +60,6 @@ infrastructure. That separation is what lets you:
 
 ## Where to go next
 
-- [Installation](/start/installation/) — picking the right combination of packages.
-- [Quickstart](/start/quickstart/) — a 60-line event-sourced aggregate.
-- [Philosophy](/start/philosophy/) — the trade-offs behind the design.
+- [Installation](/start/installation/): picking the right combination of packages.
+- [Quickstart](/start/quickstart/): a 60-line event-sourced aggregate.
+- [Philosophy](/start/philosophy/): the trade-offs behind the design.

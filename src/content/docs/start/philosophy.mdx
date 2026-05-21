@@ -1,6 +1,6 @@
 ---
 title: Philosophy
-description: The design choices behind DDD-TS — small contracts, declarative shapes, and end-to-end type safety.
+description: "The design choices behind DDD-TS: small contracts, declarative shapes, and end-to-end type safety."
 ---
 
 DDD-TS is intentionally narrow. Each package solves one problem; together they
@@ -12,13 +12,13 @@ Every infrastructure concern in DDD-TS is split into a **contract** (an
 interface plus a test suite) and one or more **implementations**. Your domain
 code only ever touches the contract.
 
-- `Store<T>` — a transactional key/value collection.
-- `EventStreamStore` / `EventLakeStore` — append-only event logs.
-- `ProjectedStream` — a way to read events filtered for a projection.
-- `TransactionPerformer` — runs a function inside a transaction.
+- `Store<T>`: a transactional key/value collection.
+- `EventStreamStore` / `EventLakeStore`: append-only event logs.
+- `ProjectedStream`: a way to read events filtered for a projection.
+- `TransactionPerformer`: runs a function inside a transaction.
 
 A contract is only worth what its tests are worth, so every contract ships a
-ready-made `Suite` — for example `EventStreamStoreSuite(store)` — that any
+ready-made `Suite` (for example `EventStreamStoreSuite(store)`) that any
 implementation must pass. The in-memory adapters run it in milliseconds; the
 Firestore adapter runs the same suite against a real emulator. That uniform
 test surface is what makes swapping adapters safe.
@@ -34,7 +34,7 @@ A `Shape` declaration gives you, at the type level and the runtime level:
 - exhaustive checks at the boundary, no `any` casts.
 
 The whole point is that the description lives in one place. There is no
-separate DTO, schema or codec file — and there is no runtime cost on the hot
+separate DTO, schema or codec file, and there is no runtime cost on the hot
 path because serialization is a straightforward walk of the declared shape.
 
 ## Traits, not deep inheritance
@@ -49,7 +49,7 @@ class Account extends Derive(Identifiable(), Named("Account"), EventSourced([…
 
 Each trait is a single function that mixes its capability into a base class.
 The type system checks at compile time that traits with prerequisites
-(`Subtrait`) only apply on top of compatible bases — no hidden runtime
+(`Subtrait`) only apply on top of compatible bases, with no hidden runtime
 contracts.
 
 ## End-to-end type safety

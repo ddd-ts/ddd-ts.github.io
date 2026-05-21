@@ -4,7 +4,7 @@ description: Defining event types, payloads and IDs with @ddd-ts/core's EsEvent 
 ---
 
 Events are the unit of persistence in an event-sourced system. `@ddd-ts/core`
-defines them with `EsEvent(name, payload)` — a maker that returns a class
+defines them with `EsEvent(name, payload)`, a maker that returns a class
 composed from the `Named` and `Shaped` traits.
 
 ## Declaring an event
@@ -35,7 +35,7 @@ e.id;             // EventId
 e.name;           // "Deposited"
 ```
 
-You almost never construct events directly — aggregates do, via
+You almost never construct events directly; aggregates do, via
 `this.apply(EventClass.new(...))`.
 
 ## The event metadata
@@ -47,7 +47,7 @@ Every event has a fixed set of fields on top of its payload:
 | `name` | `string` | The event type name, used by serializers. |
 | `id` | `EventId` | Generated UUID, stable across retries. |
 | `payload` | inferred from declaration | The domain-meaningful data. |
-| `revision` | `bigint` (optional) | Position in the stream — set on write. |
+| `revision` | `bigint` (optional) | Position in the stream, set on write. |
 | `occurredAt` | `MicrosecondTimestamp` (optional) | Wall-clock time, set on write. |
 | `ref` | `string` (optional) | Free-form correlation ref. |
 
@@ -68,7 +68,7 @@ class DepositedSerializer extends AutoSerializer(Deposited, 1) {}
 ```
 
 The second argument is the **version**. When you change the payload shape in
-an incompatible way, bump the version and add a new serializer class — the
+an incompatible way, bump the version and add a new serializer class. The
 [Serializers guide](/domain/serializers/) walks through versioned
 serializers and migrations.
 
@@ -76,7 +76,7 @@ serializers and migrations.
 
 - Event names are past-tense facts: `AccountOpened`, `Deposited`,
   `OrderShipped`. They describe something that *has happened*.
-- Names are globally unique within a serializer registry — you can have a
+- Names are globally unique within a serializer registry. You can have a
   `Deposited` event for an `Account` and one for an `Envelope`, but they will
   collide in the same registry. Prefix them when in doubt
   (`AccountDeposited`).

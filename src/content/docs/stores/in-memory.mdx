@@ -5,7 +5,7 @@ description: In-memory Store and TransactionPerformer for tests and local develo
 
 `@ddd-ts/store-inmemory` is the reference implementation of the
 [`Store` / `TransactionPerformer`](/stores/overview/) contracts. It is the
-adapter you use in test suites and during local development — fast, no setup,
+adapter you use in test suites and during local development: fast, no setup,
 no external service.
 
 ## Installation
@@ -64,7 +64,7 @@ test fixtures to work without flake.
 
 A common gotcha in transactional stores: reading the value you just wrote
 inside the same transaction. The in-memory store enforces the same rule as
-Firestore — you cannot read a key after writing to it in the same transaction.
+Firestore: you cannot read a key after writing to it in the same transaction.
 Doing so throws `CannotReadAfterWrites`, which mirrors the production error.
 
 ## Resetting between tests

@@ -1,16 +1,16 @@
 ---
 title: Aggregates
-description: Modeling event-sourced aggregates with @ddd-ts/core — events, handlers, and snapshots.
+description: Modeling event-sourced aggregates with @ddd-ts/core, covering events, handlers, and snapshots.
 ---
 
 `@ddd-ts/core` provides `EsAggregate(name, config)`, a maker that returns a
 class composed from the `Identifiable`, `Named` and `EventSourced` traits.
 Aggregates are described by:
 
-1. their **name** — a stable identifier used by the registry and the event
+1. their **name**: a stable identifier used by the registry and the event
    store;
 2. a list of **events** they can emit;
-3. (optionally) a **state shape** — required for snapshot-based aggregates.
+3. (optionally) a **state shape**, required for snapshot-based aggregates.
 
 ## Without a state shape
 
@@ -52,7 +52,7 @@ state stays consistent.
 
 ## With a state shape (snapshottable)
 
-If you also pass `state`, the aggregate becomes a `Shape` — it gains a typed
+If you also pass `state`, the aggregate becomes a `Shape`: it gains a typed
 constructor and `serialize() / deserialize()`. The store may then snapshot it
 and rebuild from a snapshot + a tail of events instead of replaying the whole
 stream.

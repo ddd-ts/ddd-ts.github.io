@@ -1,6 +1,6 @@
 ---
 title: "@ddd-ts/event-sourcing-inmemory"
-description: In-memory event streams, lakes and projected stream readers — for tests and local runs.
+description: In-memory event streams, lakes and projected stream readers, for tests and local runs.
 ---
 
 The in-memory event sourcing adapter is the reference implementation of every
@@ -47,7 +47,7 @@ const storage = new InMemoryEventLakeStorageLayer();
 const lake = new InMemoryEventLakeStore(storage, serializers);
 ```
 
-`InMemoryEventLakeStore` appends events to a single ordered log — useful for
+`InMemoryEventLakeStore` appends events to a single ordered log, useful for
 projections that need cross-aggregate ordering.
 
 ## Projected stream reader
@@ -81,7 +81,7 @@ const AccountStoreWithSnapshots = MakeInMemoryEventStreamAggregateStore(Account,
 });
 ```
 
-The snapshotter is plugged into the aggregate store — it persists serialized
+The snapshotter is plugged into the aggregate store. It persists serialized
 aggregate state every *N* events and reads from the latest snapshot first on
 load, then tails the remaining events.
 

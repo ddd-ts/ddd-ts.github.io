@@ -44,7 +44,7 @@ f.walk(); // "🚶"
 ```
 
 `Derive` always passes a single props object to the constructor. Traits that
-don't need any props can ignore it — pass `{}`.
+don't need any props can ignore it and pass `{}`.
 
 ## Traits with constructor parameters
 
@@ -75,7 +75,7 @@ class Athlete extends Derive(Run) {
 If two traits declare the same prop, the type system will require it to be
 compatible across all traits.
 
-## Subtraits — requirements between traits
+## Subtraits: requirements between traits
 
 `Subtrait(superTraits, factory)` declares a trait that may only be applied on
 top of a base that already includes the listed super-traits. The body
@@ -95,7 +95,7 @@ class FastDog  extends Derive(SwimFast) {}       // ❌ compile error
 ```
 
 When the requirements aren't met, `Derive` returns a structural type with
-`error`, `left` and `right` fields pointing at the missing capability — so the
+`error`, `left` and `right` fields pointing at the missing capability, so the
 error message reads like a constraint mismatch, not a generic type wall.
 
 ## Composing onto an existing base

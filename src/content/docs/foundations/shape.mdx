@@ -1,6 +1,6 @@
 ---
 title: "@ddd-ts/shape"
-description: Declarative schemas for domain values — validation, parsing and serialization in one place.
+description: Declarative schemas for domain values, with validation, parsing and serialization in one place.
 ---
 
 `@ddd-ts/shape` turns a small declaration into a class that knows how to
@@ -34,7 +34,7 @@ auto-mapped to their serialized JSON equivalent.
 
 ## Composition
 
-Shapes are themselves valid shape entries — they nest.
+Shapes are themselves valid shape entries; they nest.
 
 ```ts
 class Address extends Shape({ city: String, zip: String }) {}
@@ -106,7 +106,7 @@ Every shape class has:
 - a typed constructor that mirrors the declaration;
 - `serialize()` → plain JSON;
 - `static deserialize(json)` → instance;
-- `static $inline` — the inferred runtime type of the value, useful when
+- `static $inline`: the inferred runtime type of the value, useful when
   declaring helpers around it.
 
 These are the building blocks every `EsEvent`, `EsAggregate.state` and

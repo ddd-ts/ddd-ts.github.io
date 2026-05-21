@@ -22,7 +22,7 @@ interface EventStreamStore {
 ```
 
 This is what aggregate stores use under the hood. There is one logical stream
-per aggregate instance — e.g. `Account/abc-123` — and the stream's events
+per aggregate instance (e.g. `Account/abc-123`), and the stream's events
 *are* the aggregate's history.
 
 ## `EventLakeStore`
@@ -39,7 +39,7 @@ interface EventLakeStore {
 }
 ```
 
-Lake writes don't take an expected revision — they're unconditional appends.
+Lake writes don't take an expected revision; they're unconditional appends.
 Concurrent appends to the same lake are serialized by the underlying store.
 
 ## `ProjectedStreamReader`
@@ -57,7 +57,7 @@ interface ProjectedStreamReader {
 }
 ```
 
-A reader does *not* maintain a checkpoint — checkpointing is the projector's
+A reader does *not* maintain a checkpoint; checkpointing is the projector's
 responsibility. The reader is stateless: it answers "give me events from
 this position".
 

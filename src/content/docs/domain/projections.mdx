@@ -45,7 +45,7 @@ export class CashflowProjection extends Projection("Cashflow", [Deposited, Withd
 
 ## Projected streams
 
-A projection rarely consumes a single aggregate's stream — usually it spans
+A projection rarely consumes a single aggregate's stream; usually it spans
 several. `ProjectedStream` describes a filtered view across one or more
 sources:
 
@@ -94,7 +94,7 @@ for await (const event of reader.read(stream, { from: "start" })) {
 
 ## Read models
 
-A projection writes its results to a regular `Store<T>` — anything you can
+A projection writes its results to a regular `Store<T>`, anything you can
 load and save. The read model itself doesn't know it was built from events;
 queries against it are plain store reads with no replay.
 

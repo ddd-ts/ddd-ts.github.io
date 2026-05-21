@@ -17,7 +17,7 @@ pnpm add -D @ddd-ts/event-sourcing-inmemory @ddd-ts/store-inmemory
 ## Model the domain
 
 Events first. `EsEvent(name, payload)` produces a class whose payload is
-described with `@ddd-ts/shape` shorthands — the same primitives you'd use for
+described with `@ddd-ts/shape` shorthands, the same primitives you'd use for
 plain value objects.
 
 ```ts
@@ -87,7 +87,7 @@ export class Account extends EsAggregate("Account", {
 }
 ```
 
-The static `@On(AccountOpened)` handler is the **constructor handler** — it
+The static `@On(AccountOpened)` handler is the **constructor handler**: it
 returns the initial state for the aggregate. Instance handlers mutate the
 already-loaded aggregate.
 
@@ -133,7 +133,7 @@ const loaded = await accounts.load(account.id);
 console.log(loaded?.balance); // 120
 ```
 
-That's it — a real event-sourced aggregate, with an append-only stream behind
+That's it: a real event-sourced aggregate, with an append-only stream behind
 it, fully typed end-to-end and runnable without any external service.
 
 ## Next steps
