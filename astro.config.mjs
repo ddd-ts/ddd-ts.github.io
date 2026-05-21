@@ -153,6 +153,17 @@ export default defineConfig({
 :root { --sl-font: "Supreme", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 `,
         },
+        // Pin Starlight to dark mode. The picker is hidden in theme.css, but
+        // Starlight's <ThemeProvider> still flips `data-theme` to "light" when
+        // localStorage says so or the OS prefers light — that's what was
+        // making the `<Card>` icon chips render with pastel light-mode
+        // backgrounds. This script runs inside <Head>, which Page.astro
+        // renders before <ThemeProvider>, so ThemeProvider then reads "dark"
+        // from storage and applies it.
+        {
+          tag: "script",
+          content: `try { localStorage.setItem('starlight-theme', 'dark'); } catch (e) {}`,
+        },
         // Force every external link (anything that isn't a same-origin URL) to
         // open in a new tab. The rehype-external-links plugin handles markdown
         // anchors at build time; this script covers the rest — Starlight's

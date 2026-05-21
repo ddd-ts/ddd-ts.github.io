@@ -130,6 +130,13 @@ header.header starlight-theme-select {
   display: none;
 }
 
+/* The social-icons group has a ::after vertical rule that separated it from
+   the now-hidden theme picker. With the picker gone it floats at the right
+   edge of the header without anything to divide from — hide it. */
+header.header .social-icons::after {
+  display: none;
+}
+
 /* Cards used in docs (Starlight's <Card />) inherit the splash surface look. */
 .sl-markdown-content .card,
 .sl-markdown-content starlight-card,
