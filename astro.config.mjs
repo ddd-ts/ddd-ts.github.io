@@ -75,7 +75,9 @@ export default defineConfig({
             { slug: "domain/events" },
             { slug: "domain/serializers" },
             { slug: "domain/projections" },
+            { slug: "domain/shard-key" },
             { slug: "domain/freeze" },
+            { slug: "domain/event-tree-viewer" },
           ],
         },
         {
@@ -90,6 +92,7 @@ export default defineConfig({
           label: "Event sourcing",
           items: [
             { slug: "event-sourcing/overview" },
+            { slug: "event-sourcing/store-lake-or-bus" },
             { slug: "event-sourcing/in-memory" },
             { slug: "event-sourcing/firestore" },
             { slug: "event-sourcing/esdb" },

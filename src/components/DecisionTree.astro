@@ -1,0 +1,1252 @@
+---
+type QuestionNode = {
+  type: "question";
+  title: string;
+  hint?: string;
+  yes: string;
+  no: string;
+  yesLabel?: string;
+  noLabel?: string;
+};
+
+type LeafNode = {
+  type: "leaf";
+  title: string;
+  detail: string;
+  /**
+   * When shape mode is on, a leaf can ask the reader to pick the field that
+   * plays the leaf's role (the dimension, the projected id, ...). The picker
+   * is populated from the events the reader entered, and validates that the
+   * chosen field exists on every event.
+   */
+  pick?: {
+    prompt: string;
+    /** Template for the concrete answer; {field} is replaced. */
+    recommend: string;
+  };
+};
+
+type TreeNode = QuestionNode | LeafNode;
+
+interface Props {
+  start: string;
+  nodes: Record<string, TreeNode>;
+  /** Scope id, in case several trees share a page. */
+  id?: string;
+  /**
+   * Turns on the events editor in the interactive panel. Leaves with a `pick`
+   * then recommend a concrete field instead of generic guidance.
+   */
+  shape?: {
+    label: string;
+    placeholder: string;
+  };
+}
+
+const { start, nodes, id, shape } = Astro.props;
+
+// Walk the `no` spine top to bottom. A normal question puts its `yes` leaf on
+// the right and steps down on `no`. The last question (whose `no` is itself a
+// leaf) becomes a "final" row: both answers sit on the right, so every leaf in
+// the graph lives on the right-hand side.
+type Row =
+  | {
+      kind: "question";
+      questionId: string;
+      q: QuestionNode;
+      yesId: string;
+      yes: TreeNode;
+    }
+  | {
+      kind: "final";
+      questionId: string;
+      q: QuestionNode;
+      yesId: string;
+      yes: LeafNode;
+      noId: string;
+      no: LeafNode;
+    }
+  | { kind: "terminal"; leafId: string; leaf: LeafNode };
+
+const rows: Row[] = [];
+let cursor: string | undefined = start;
+const seen = new Set<string>();
+while (cursor) {
+  if (seen.has(cursor)) throw new Error(`Decision tree cycle on node ${cursor}`);
+  seen.add(cursor);
+  const node: TreeNode | undefined = nodes[cursor];
+  if (!node) throw new Error(`Decision tree missing node ${cursor}`);
+  if (node.type === "leaf") {
+    rows.push({ kind: "terminal", leafId: cursor, leaf: node });
+    cursor = undefined;
+  } else {
+    const yes: TreeNode | undefined = nodes[node.yes];
+    const no: TreeNode | undefined = nodes[node.no];
+    if (!yes) throw new Error(`Decision tree missing yes-target ${node.yes}`);
+    if (!no) throw new Error(`Decision tree missing no-target ${node.no}`);
+    if (yes.type === "leaf" && no.type === "leaf") {
+      rows.push({
+        kind: "final",
+        questionId: cursor,
+        q: node,
+        yesId: node.yes,
+        yes,
+        noId: node.no,
+        no,
+      });
+      cursor = undefined;
+    } else {
+      rows.push({ kind: "question", questionId: cursor, q: node, yesId: node.yes, yes });
+      cursor = node.no;
+    }
+  }
+}
+
+const widgetId = id ?? `dt-${Math.random().toString(36).slice(2, 9)}`;
+const treeJson = JSON.stringify({ start, nodes });
+const shapeJson = JSON.stringify(shape ?? null);
+---
+
+<div class="dt" data-dt-id={widgetId} data-dt-tree={treeJson} data-dt-shape={shapeJson}>
+  <div class="dt-layout">
+    <button type="button" class="dt-launch" data-dt-launch>
+      <span>Help me choose</span>
+      <svg viewBox="0 0 20 14" aria-hidden="true" class="dt-launch-arrow">
+        <path d="M1 7 H14" stroke="currentColor" stroke-width="2" fill="none" />
+        <path d="M14 2 L19 7 L14 12 Z" fill="currentColor" />
+      </svg>
+    </button>
+
+    <div class="dt-graph" role="img" aria-label="Decision tree">
+      {rows.map((row, idx) => {
+        const qNum = rows.slice(0, idx + 1).filter((r) => r.kind !== "terminal").length;
+        return (
+          <>
+            {row.kind === "question" && (
+              <>
+                <div class="dt-row">
+                  <div class="dt-cell dt-cell--question" data-dt-node={row.questionId}>
+                    <span class="dt-tag">Q{qNum}</span>
+                    <p class="dt-cell-title">{row.q.title}</p>
+                    {row.q.hint && <p class="dt-cell-extra">{row.q.hint}</p>}
+                  </div>
+                  <div
+                    class="dt-edge"
+                    data-dt-edge-from={row.questionId}
+                    data-dt-edge-to={row.yesId}
+                  >
+                    <span class="dt-edge-label">{row.q.yesLabel ?? "Yes"}</span>
+                    <svg class="dt-arrow dt-arrow--right" viewBox="0 0 48 14" aria-hidden="true">
+                      <path class="dt-arrow-stem" d="M1 7 H34" />
+                      <path class="dt-arrow-head" d="M34 2 L46 7 L34 12 Z" />
+                    </svg>
+                  </div>
+                  <div class="dt-cell dt-cell--leaf" data-dt-node={row.yesId}>
+                    <p class="dt-cell-title">{row.yes.title}</p>
+                    {row.yes.type === "leaf" && (
+                      <p class="dt-cell-extra">{row.yes.detail}</p>
+                    )}
+                  </div>
+                </div>
+                <div
+                  class="dt-down"
+                  data-dt-edge-from={row.questionId}
+                  data-dt-edge-to={row.q.no}
+                >
+                  <svg class="dt-arrow dt-arrow--down" viewBox="0 0 14 40" aria-hidden="true">
+                    <path class="dt-arrow-stem" d="M7 1 V28" />
+                    <path class="dt-arrow-head" d="M2 28 L7 39 L12 28 Z" />
+                  </svg>
+                  <span class="dt-edge-label">{row.q.noLabel ?? "No"}</span>
+                </div>
+              </>
+            )}
+
+            {row.kind === "final" && (
+              <div class="dt-row dt-row--final">
+                <div class="dt-cell dt-cell--question dt-final-q" data-dt-node={row.questionId}>
+                  <span class="dt-tag">Q{qNum}</span>
+                  <p class="dt-cell-title">{row.q.title}</p>
+                  {row.q.hint && <p class="dt-cell-extra">{row.q.hint}</p>}
+                </div>
+
+                <div
+                  class="dt-edge dt-final-edge dt-final-r1"
+                  data-dt-edge-from={row.questionId}
+                  data-dt-edge-to={row.yesId}
+                >
+                  <span class="dt-edge-label">{row.q.yesLabel ?? "Yes"}</span>
+                  <svg class="dt-arrow dt-arrow--right" viewBox="0 0 48 14" aria-hidden="true">
+                    <path class="dt-arrow-stem" d="M1 7 H34" />
+                    <path class="dt-arrow-head" d="M34 2 L46 7 L34 12 Z" />
+                  </svg>
+                </div>
+                <div class="dt-cell dt-cell--leaf dt-final-leaf dt-final-r1" data-dt-node={row.yesId}>
+                  <p class="dt-cell-title">{row.yes.title}</p>
+                  <p class="dt-cell-extra">{row.yes.detail}</p>
+                </div>
+
+                <div
+                  class="dt-edge dt-final-edge dt-final-r2"
+                  data-dt-edge-from={row.questionId}
+                  data-dt-edge-to={row.noId}
+                >
+                  <span class="dt-edge-label">{row.q.noLabel ?? "No"}</span>
+                  <svg class="dt-arrow dt-arrow--right" viewBox="0 0 48 14" aria-hidden="true">
+                    <path class="dt-arrow-stem" d="M1 7 H34" />
+                    <path class="dt-arrow-head" d="M34 2 L46 7 L34 12 Z" />
+                  </svg>
+                </div>
+                <div class="dt-cell dt-cell--leaf dt-final-leaf dt-final-r2" data-dt-node={row.noId}>
+                  <p class="dt-cell-title">{row.no.title}</p>
+                  <p class="dt-cell-extra">{row.no.detail}</p>
+                </div>
+              </div>
+            )}
+
+            {row.kind === "terminal" && (
+              <div class="dt-row dt-row--terminal">
+                <div class="dt-cell dt-cell--leaf" data-dt-node={row.leafId}>
+                  <p class="dt-cell-title">{row.leaf.title}</p>
+                  <p class="dt-cell-extra">{row.leaf.detail}</p>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })}
+    </div>
+
+    <aside class="dt-panel" data-dt-panel>
+      <div class="dt-interactive" data-dt-interactive hidden>
+        <div class="dt-panel-head">
+          <button type="button" class="dt-btn dt-btn--ghost dt-restart" data-dt-restart hidden>
+            Restart
+          </button>
+          <button type="button" class="dt-btn dt-btn--ghost" data-dt-close>Close</button>
+        </div>
+        {shape && (
+          <details class="dt-shape" data-dt-shape-editor>
+            <summary>{shape.label}</summary>
+            <textarea
+              class="dt-shape-input"
+              data-dt-shape-input
+              rows="4"
+              placeholder={shape.placeholder}
+              spellcheck="false"
+            ></textarea>
+            <div class="dt-shape-summary" data-dt-shape-summary hidden></div>
+          </details>
+        )}
+        <div class="dt-panel-body" data-dt-body></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script is:inline define:vars={{ widgetId }}>
+  (() => {
+    const root = document.querySelector(`[data-dt-id="${widgetId}"]`);
+    if (!root) return;
+
+    const tree = JSON.parse(root.dataset.dtTree);
+    const panel = root.querySelector("[data-dt-panel]");
+    const launch = root.querySelector("[data-dt-launch]");
+    const interactive = root.querySelector("[data-dt-interactive]");
+    const body = root.querySelector("[data-dt-body]");
+    const restart = root.querySelector("[data-dt-restart]");
+    const closeBtn = root.querySelector("[data-dt-close]");
+    const shapeInput = root.querySelector("[data-dt-shape-input]");
+    const shapeSummary = root.querySelector("[data-dt-shape-summary]");
+
+    let history = [];
+    let didInteract = false;
+
+    // ---- shape parsing ------------------------------------------------
+    // One event per line: "Deposited: accountId, amount". The right side is
+    // split on commas/whitespace. An event with no fields still counts.
+    const parseShape = () => {
+      if (!shapeInput) return { events: [], all: [], common: [] };
+      const events = shapeInput.value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const sep = line.indexOf(":");
+          const name = (sep === -1 ? line : line.slice(0, sep)).trim();
+          const rest = sep === -1 ? "" : line.slice(sep + 1);
+          const fields = rest
+            .split(/[,\s]+/)
+            .map((f) => f.trim())
+            .filter(Boolean);
+          return { name, fields };
+        });
+
+      const all = [...new Set(events.flatMap((e) => e.fields))];
+      const common = all.filter((f) => events.every((e) => e.fields.includes(f)));
+      return { events, all, common };
+    };
+
+    const renderShapeSummary = () => {
+      if (!shapeSummary) return;
+      const { events, common } = parseShape();
+      if (!events.length) {
+        shapeSummary.hidden = true;
+        return;
+      }
+      shapeSummary.hidden = false;
+      if (common.length) {
+        shapeSummary.innerHTML =
+          `<span class="dt-shape-summary-label">Eligible keys:</span> ` +
+          common.map((f) => `<code class="dt-chip">${f}</code>`).join(" ");
+      } else {
+        shapeSummary.innerHTML = `<span class="dt-warn">No field is present in every event.</span>`;
+      }
+    };
+
+    // ---- graph highlighting ------------------------------------------
+    const clearActive = () => {
+      root
+        .querySelectorAll(".dt-cell--active, .dt-edge--active, .dt-down--active")
+        .forEach((el) =>
+          el.classList.remove("dt-cell--active", "dt-edge--active", "dt-down--active"),
+        );
+    };
+
+    const highlight = (path) => {
+      clearActive();
+      for (let i = 0; i < path.length; i++) {
+        const node = root.querySelector(`[data-dt-node="${path[i]}"]`);
+        if (node) node.classList.add("dt-cell--active");
+        if (i < path.length - 1) {
+          const edge = root.querySelector(
+            `[data-dt-edge-from="${path[i]}"][data-dt-edge-to="${path[i + 1]}"]`,
+          );
+          if (edge) {
+            edge.classList.add("dt-edge--active");
+            if (edge.classList.contains("dt-down")) edge.classList.add("dt-down--active");
+          }
+        }
+      }
+    };
+
+    // Keep the freshly-highlighted node visible above the docked menu, but
+    // never yank the page before the reader has started.
+    const scrollIntoViewIfNeeded = (nodeId) => {
+      if (!didInteract) return;
+      const el = root.querySelector(`[data-dt-node="${nodeId}"]`);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const panelTop = panel.getBoundingClientRect().top;
+      if (r.top < 80 || r.bottom > panelTop - 8) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    };
+
+    // ---- field picker (shape mode) -----------------------------------
+    const buildPicker = (leaf) => {
+      const { events, common } = parseShape();
+      const wrap = document.createElement("div");
+      wrap.className = "dt-pick";
+
+      if (!events.length) {
+        wrap.innerHTML = `<p class="dt-pick-empty">Add your events above to get the exact field to use.</p>`;
+        return wrap;
+      }
+
+      // Only fields present in every event are eligible shard keys: a field
+      // missing from one event would not typecheck. If none qualify, the events
+      // disagree about what they belong to.
+      if (!common.length) {
+        wrap.innerHTML =
+          `<p class="dt-pick-note dt-warn">No field is present in every event. ` +
+          `Pick a broader key every event carries, or split the projection in two.</p>`;
+        return wrap;
+      }
+
+      const label = document.createElement("p");
+      label.className = "dt-pick-label";
+      label.textContent = leaf.pick.prompt;
+      wrap.appendChild(label);
+
+      // The eligible keys are the same on every path; what differs is the role
+      // the prompt asks about. Letting the reader pick the field for that role
+      // narrows the recommendation from the union down to the one key that fits,
+      // so the path actually changes the result. With a single eligible key
+      // there is nothing to choose, so it is preselected.
+      let selected = common.length === 1 ? common[0] : null;
+      const pre = document.createElement("pre");
+
+      let chips;
+      if (common.length > 1) {
+        chips = document.createElement("div");
+        chips.className = "dt-keys";
+        common.forEach((field) => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "dt-key";
+          chip.textContent = field;
+          chip.addEventListener("click", () => {
+            selected = selected === field ? null : field;
+            sync();
+          });
+          chips.appendChild(chip);
+        });
+        wrap.appendChild(chips);
+      }
+
+      pre.className = "dt-code";
+      const codeEl = document.createElement("code");
+      codeEl.className = "dt-grad-text";
+      pre.appendChild(codeEl);
+      wrap.appendChild(pre);
+
+      const sync = () => {
+        const value = selected
+          ? `"${selected}"`
+          : common.map((f) => `"${f}"`).join(" | ");
+        codeEl.textContent = leaf.pick.recommend.replace(/\{field\}/g, value);
+        if (chips) {
+          for (const chip of chips.children) {
+            chip.classList.toggle("is-selected", chip.textContent === selected);
+          }
+        }
+      };
+      sync();
+
+      return wrap;
+    };
+
+    // ---- render -------------------------------------------------------
+    const render = () => {
+      const currentId = history[history.length - 1];
+      const current = tree.nodes[currentId];
+      highlight(history);
+      body.replaceChildren();
+
+      if (current.type === "leaf") {
+        const result = document.createElement("div");
+        result.className = "dt-result";
+        result.innerHTML =
+          `<span class="dt-eyebrow dt-grad-text">Recommendation</span>` +
+          `<p class="dt-result-title"></p>` +
+          `<p class="dt-result-detail"></p>`;
+        result.querySelector(".dt-result-title").textContent = current.title;
+        result.querySelector(".dt-result-detail").textContent = current.detail;
+        if (shapeInput && current.pick) result.appendChild(buildPicker(current));
+        body.appendChild(result);
+        restart.hidden = false;
+        scrollIntoViewIfNeeded(currentId);
+        return;
+      }
+
+      const qIndex = history.filter((id) => tree.nodes[id].type === "question").length;
+      const step = document.createElement("div");
+      step.className = "dt-step";
+      step.innerHTML =
+        `<span class="dt-tag">Q${qIndex}</span>` +
+        `<p class="dt-step-text"></p>` +
+        (current.hint ? `<p class="dt-step-hint"></p>` : "") +
+        `<div class="dt-step-actions">` +
+        `<button type="button" class="dt-btn" data-choice="yes"></button>` +
+        `<button type="button" class="dt-btn" data-choice="no"></button>` +
+        `<button type="button" class="dt-btn dt-btn--ghost dt-back" data-dt-back hidden>Back</button>` +
+        `</div>`;
+      step.querySelector(".dt-step-text").textContent = current.title;
+      if (current.hint) step.querySelector(".dt-step-hint").textContent = current.hint;
+
+      const yesBtn = step.querySelector('[data-choice="yes"]');
+      const noBtn = step.querySelector('[data-choice="no"]');
+      yesBtn.textContent = current.yesLabel ?? "Yes";
+      noBtn.textContent = current.noLabel ?? "No";
+      yesBtn.addEventListener("click", () => {
+        didInteract = true;
+        history.push(current.yes);
+        render();
+      });
+      noBtn.addEventListener("click", () => {
+        didInteract = true;
+        history.push(current.no);
+        render();
+      });
+
+      const backBtn = step.querySelector("[data-dt-back]");
+      if (history.length > 1) {
+        backBtn.hidden = false;
+        backBtn.addEventListener("click", () => {
+          didInteract = true;
+          history.pop();
+          render();
+        });
+      }
+      body.appendChild(step);
+      restart.hidden = history.length <= 1;
+      scrollIntoViewIfNeeded(currentId);
+    };
+
+    const reset = () => {
+      history = [tree.start];
+      didInteract = false;
+      render();
+    };
+
+    const open = () => {
+      interactive.hidden = false;
+      panel.classList.add("is-open");
+      reset();
+    };
+
+    const close = () => {
+      interactive.hidden = true;
+      panel.classList.remove("is-open");
+      clearActive();
+    };
+
+    // The launch button stays visible; when the menu is already open it just
+    // brings it back into view (and restarts) rather than disappearing.
+    launch.addEventListener("click", () => {
+      const wasOpen = panel.classList.contains("is-open");
+      open();
+      if (wasOpen) interactive.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    // Each node carries its own hint/detail. Hover reveals it on desktop; on
+    // touch (and for keyboard) the node itself toggles it. The reveal lives on
+    // the node, right where the reasoning belongs, not on a far-off control.
+    root.querySelectorAll(".dt-cell").forEach((cell) => {
+      if (!cell.querySelector(".dt-cell-extra")) return;
+      cell.classList.add("dt-cell--has-extra");
+      cell.setAttribute("tabindex", "0");
+      cell.setAttribute("role", "button");
+      cell.setAttribute("aria-expanded", "false");
+      const toggle = () => {
+        const on = cell.classList.toggle("is-open");
+        cell.setAttribute("aria-expanded", String(on));
+      };
+      cell.addEventListener("click", toggle);
+      cell.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggle();
+        }
+      });
+    });
+
+    closeBtn.addEventListener("click", close);
+    restart.addEventListener("click", () => {
+      didInteract = true;
+      reset();
+    });
+    if (shapeInput) {
+      shapeInput.addEventListener("input", () => {
+        renderShapeSummary();
+        render(); // refresh any open picker against the new events
+      });
+    }
+  })();
+</script>
+
+<style is:global>
+  .dt {
+    --dt-blue: #385cff;
+    --dt-blue-soft: #7b86ff;
+    --dt-blue-text: #c7cfff;
+    --dt-card-bg: linear-gradient(149deg, #1d1d1d 6.3%, #1f1f1f 54.18%, #242424 97.73%);
+    --dt-border: rgba(255, 255, 255, 0.09);
+    --dt-border-strong: rgba(255, 255, 255, 0.16);
+    --dt-muted: rgba(255, 255, 255, 0.55);
+    --dt-fg: var(--ddd-fg, #fafafa);
+
+    margin: 2rem 0;
+    container-type: inline-size;
+  }
+
+  /* Our elements set an explicit `display`, which would otherwise tie with the
+     UA `[hidden] { display: none }` rule and leave hidden buttons visible. */
+  .dt [hidden] {
+    display: none !important;
+  }
+
+  /* Accent text: one clean light blue (the glow lives on surfaces, not text). */
+  .dt-grad-text {
+    color: var(--dt-blue-text);
+  }
+
+  /* Launch button on top, graph in the middle, interactive menu at the bottom. */
+  .dt-layout {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "launch" "graph" "panel";
+  }
+
+  .dt-launch {
+    grid-area: launch;
+    justify-self: start;
+    margin-bottom: 0.5rem;
+  }
+
+  .dt-graph {
+    grid-area: graph;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .dt-panel {
+    grid-area: panel;
+    min-width: 0;
+  }
+
+  /* Once open, the menu docks to the bottom of the viewport so the graph stays
+     scrollable above it while you answer. */
+  .dt-panel.is-open {
+    position: sticky;
+    bottom: 0.75rem;
+    z-index: 5;
+  }
+
+  /* ---- launch button: homepage CTA surface ---- */
+  .dt-launch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1.3rem;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(172deg, #1d1d1d 6.3%, #1f1f1f 54.18%, #242424 97.73%);
+    color: var(--dt-blue-text);
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow:
+      0 1px 4px -1px rgba(0, 0, 0, 0.1),
+      0 6px 14px -2px rgba(0, 0, 0, 0.2),
+      0 12px 24px -6px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+    transition: transform 140ms ease, box-shadow 140ms ease;
+  }
+
+  .dt-launch:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 2px 6px -1px rgba(0, 0, 0, 0.18),
+      0 10px 22px -2px rgba(0, 0, 0, 0.28),
+      0 18px 34px -8px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .dt-launch-arrow {
+    width: 20px;
+    height: 14px;
+    color: var(--dt-blue-soft);
+  }
+
+  /* ---- graph rows ---- */
+  /* Fixed edge column so every leaf (yes leaves and the final no leaf) lines up
+     on the same right-hand column. */
+  .dt-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 3.4rem minmax(0, 1.35fr);
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .dt-row--terminal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The last question forks: the question spans both rows on the left, and its
+     two answers sit on the right, each reached by the SAME right arrow as every
+     other answer. */
+  .dt-row--final {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 3.4rem minmax(0, 1.35fr);
+    grid-template-rows: auto auto;
+    column-gap: 0.6rem;
+    row-gap: 0.7rem;
+    align-items: center;
+  }
+
+  .dt-final-q {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    align-self: stretch;
+    justify-content: center;
+  }
+
+  .dt-final-edge {
+    grid-column: 2;
+  }
+
+  .dt-final-leaf {
+    grid-column: 3;
+  }
+
+  .dt-final-r1 {
+    grid-row: 1;
+  }
+
+  .dt-final-r2 {
+    grid-row: 2;
+  }
+
+  /* Cells use the homepage card surface: no border, 16px radius, layered
+     shadow with an inner top highlight. */
+  .dt-cell {
+    position: relative;
+    z-index: 0;
+    background: var(--dt-card-bg);
+    border: none;
+    border-radius: 16px;
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-width: 0;
+    box-shadow:
+      0 2px 8px -1px rgba(0, 0, 0, 0.1),
+      0 12px 28px -4px rgba(0, 0, 0, 0.2),
+      0 24px 48px -12px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+    transition: box-shadow 200ms ease, background 200ms ease;
+  }
+
+  /* Answer cells now hold a single short title; center it so it sits balanced
+     against the taller question cell beside it. */
+  .dt-cell--leaf {
+    justify-content: center;
+  }
+
+  /* Active node: filled with the brand glow surface, with a faint blue ring. */
+  .dt-cell--active {
+    background: var(--ddd-glow-surface);
+    box-shadow:
+      inset 0 0 0 1px rgba(123, 134, 255, 0.4),
+      0 12px 36px -14px rgba(0, 0, 0, 0.55),
+      0 8px 30px -12px rgba(56, 92, 255, 0.35);
+  }
+
+  /* Small tag (Q1, Q2 ...) above the title so the title and hint share the
+     same left edge. */
+  .dt-tag {
+    align-self: flex-start;
+    font-family: var(--sl-font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--dt-blue-text);
+    background: rgba(56, 92, 255, 0.14);
+    border: 1px solid rgba(123, 134, 255, 0.3);
+    border-radius: 5px;
+    padding: 0.1rem 0.4rem;
+    line-height: 1.4;
+  }
+
+  .dt-cell-title {
+    margin: 0;
+    font-weight: 500;
+    color: var(--dt-fg);
+    font-size: 0.95rem;
+    line-height: 1.35;
+  }
+
+  /* Hint (questions) / detail (leaves) live in a floating popover anchored to
+     the node. It overlays neighbours instead of pushing them, so revealing it
+     never reflows the graph. Hidden until the node is hovered, focused or
+     tapped. */
+  .dt-cell-extra {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    margin: 0;
+    padding: 0.7rem 0.85rem;
+    border-radius: 10px;
+    background: #1b1b1b;
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+      0 8px 22px -6px rgba(0, 0, 0, 0.6),
+      0 2px 8px -2px rgba(0, 0, 0, 0.4);
+    font-size: 0.82rem;
+    color: var(--dt-muted);
+    line-height: 1.5;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+    pointer-events: none;
+  }
+
+  .dt-cell--has-extra {
+    cursor: pointer;
+  }
+
+  /* Leave room top-right for the chevron so it never overlaps the title. */
+  .dt-cell--has-extra .dt-cell-title {
+    padding-right: 1.4rem;
+  }
+
+  /* Chevron marks a node as expandable; it rotates when the detail is shown. */
+  .dt-cell--has-extra::after {
+    content: "";
+    position: absolute;
+    top: 1.15rem;
+    right: 1.1rem;
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid var(--dt-muted);
+    border-bottom: 1.5px solid var(--dt-muted);
+    transform: rotate(45deg);
+    transition: transform 150ms ease, border-color 150ms ease;
+  }
+
+  /* Raise the active node above its neighbours so the popover sits on top. */
+  .dt-cell--has-extra:hover,
+  .dt-cell--has-extra:focus-within,
+  .dt-cell--has-extra.is-open {
+    z-index: 40;
+  }
+
+  .dt-cell--has-extra:hover .dt-cell-extra,
+  .dt-cell--has-extra:focus-within .dt-cell-extra,
+  .dt-cell--has-extra.is-open .dt-cell-extra {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .dt-cell--has-extra:hover::after,
+  .dt-cell--has-extra:focus-within::after,
+  .dt-cell--has-extra.is-open::after {
+    transform: rotate(-135deg);
+    border-color: var(--dt-blue-soft);
+  }
+
+  .dt-cell--has-extra:focus-visible {
+    outline: 2px solid rgba(123, 134, 255, 0.5);
+    outline-offset: 2px;
+  }
+
+  /* ---- arrows (single-fill SVG, abutting so there is no dark seam) ---- */
+  .dt-edge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    color: var(--dt-border-strong);
+    padding: 0 0.15rem;
+  }
+
+  .dt-down {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding-left: 1.1rem;
+    color: var(--dt-border-strong);
+  }
+
+  .dt-edge-label {
+    font-family: var(--sl-font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--dt-muted);
+    transition: color 200ms ease;
+  }
+
+  .dt-arrow-stem {
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+  }
+
+  .dt-arrow-head {
+    fill: currentColor;
+  }
+
+  .dt-arrow--right {
+    width: 48px;
+    height: 14px;
+  }
+
+  .dt-arrow--down {
+    width: 14px;
+    height: 38px;
+  }
+
+  /* Active arrows pick up the brand blue. */
+  .dt-edge--active,
+  .dt-down--active {
+    color: var(--dt-blue-soft);
+  }
+
+  .dt-edge--active .dt-edge-label,
+  .dt-down--active .dt-edge-label {
+    color: var(--dt-blue-soft);
+  }
+
+  /* ---- panel: homepage card surface, docked at the bottom ---- */
+  .dt-interactive {
+    background: var(--dt-card-bg);
+    border: none;
+    border-radius: 16px;
+    padding: 1.15rem 1.25rem 1.3rem;
+    /* Soft upward shadow so the docked menu floats cleanly over the graph
+       (no bright top-edge line reading as a stray border). */
+    box-shadow:
+      0 -16px 32px -16px rgba(0, 0, 0, 0.7),
+      0 2px 8px -1px rgba(0, 0, 0, 0.1),
+      0 12px 28px -4px rgba(0, 0, 0, 0.2),
+      0 24px 48px -12px rgba(0, 0, 0, 0.2);
+    max-height: min(74vh, 560px);
+    overflow-y: auto;
+  }
+
+  .dt-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .dt-eyebrow {
+    font-family: var(--sl-font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .dt-step {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .dt-step-text {
+    margin: 0;
+    font-size: 1.02rem;
+    line-height: 1.35;
+    color: var(--dt-fg);
+    font-weight: 500;
+  }
+
+  .dt-step-hint {
+    margin: 0;
+    font-size: 0.84rem;
+    color: var(--dt-muted);
+    line-height: 1.45;
+  }
+
+  .dt-step-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  /* Buttons use the same surface as the site CTAs / pagination: dark gradient,
+     no hard border, layered shadow with inner highlight, lift on hover. The
+     `.dt`-prefixed selector outranks Starlight's `:where()` content rules and
+     drops its flow margin. */
+  .dt .dt-btn {
+    appearance: none;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    height: 2.3rem;
+    padding: 0 1.1rem;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(172deg, #1d1d1d 6.3%, #1f1f1f 54.18%, #242424 97.73%);
+    color: var(--dt-fg);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    vertical-align: middle;
+    box-shadow:
+      0 1px 4px -1px rgba(0, 0, 0, 0.1),
+      0 6px 14px -2px rgba(0, 0, 0, 0.2),
+      0 12px 24px -6px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+    transition: transform 140ms ease, box-shadow 140ms ease;
+  }
+
+  .dt .dt-btn:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 2px 6px -1px rgba(0, 0, 0, 0.18),
+      0 10px 22px -2px rgba(0, 0, 0, 0.28),
+      0 18px 34px -8px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .dt .dt-btn:active {
+    transform: translateY(0);
+  }
+
+  /* Secondary actions (Restart / Close / Back): the site's ghost CTA, no
+     surface, just text that lifts on hover. */
+  .dt .dt-btn--ghost {
+    height: 1.85rem;
+    padding: 0 0.7rem;
+    font-size: 0.78rem;
+    background: transparent;
+    box-shadow: none;
+    color: var(--dt-muted);
+  }
+
+  .dt .dt-btn--ghost:hover {
+    transform: none;
+    color: var(--dt-fg);
+    box-shadow: none;
+  }
+
+  .dt .dt-back {
+    margin-left: auto;
+  }
+
+  .dt-result {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .dt-result-title {
+    margin: 0;
+    font-size: 1.08rem;
+    color: var(--dt-fg);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .dt-result-detail {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--dt-muted);
+    line-height: 1.5;
+  }
+
+  /* ---- shape editor: site field surface (matches the header search) ---- */
+  .dt-shape {
+    margin-bottom: 1rem;
+    border: 1px solid var(--sl-color-hairline, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem;
+    background: linear-gradient(172deg, #1d1d1d 0%, #242424 100%);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .dt-shape > summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--dt-fg);
+    list-style-position: inside;
+  }
+
+  .dt-shape-input {
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: 0.6rem;
+    background: linear-gradient(172deg, #1d1d1d 0%, #242424 100%);
+    border: 1px solid var(--sl-color-hairline, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    padding: 0.55rem 0.65rem;
+    color: var(--dt-fg);
+    font-family: var(--sl-font-mono);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    resize: vertical;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .dt-shape-input:focus {
+    outline: none;
+    border-color: rgba(123, 134, 255, 0.6);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+      0 0 0 1px rgba(123, 134, 255, 0.3);
+  }
+
+  .dt-shape-summary {
+    margin-top: 0.55rem;
+    font-size: 0.78rem;
+    color: var(--dt-muted);
+    line-height: 1.7;
+  }
+
+  .dt-chip {
+    background: rgba(56, 92, 255, 0.16);
+    border: 1px solid rgba(123, 134, 255, 0.35);
+    border-radius: 5px;
+    padding: 0.05rem 0.4rem;
+    font-family: var(--sl-font-mono);
+    font-size: 0.74rem;
+    color: var(--dt-blue-text);
+  }
+
+  /* ---- picker ---- */
+  .dt-pick {
+    margin-top: 1rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--dt-border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .dt-pick-label {
+    margin: 0;
+    font-size: 0.84rem;
+    color: var(--dt-fg);
+    font-weight: 500;
+  }
+
+  .dt-pick-empty {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--dt-muted);
+    line-height: 1.45;
+  }
+
+  /* Eligible keys offered as selectable pills: pick the one the prompt asks
+     about to narrow the union to a single key. */
+  .dt-keys {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .dt-key {
+    appearance: none;
+    margin: 0;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--sl-color-hairline, rgba(255, 255, 255, 0.08));
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--dt-fg);
+    font-family: var(--sl-font-mono);
+    font-size: 0.76rem;
+    cursor: pointer;
+    transition:
+      border-color 140ms ease,
+      background 140ms ease,
+      color 140ms ease;
+  }
+
+  .dt-key:hover {
+    border-color: rgba(123, 134, 255, 0.45);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .dt-key.is-selected {
+    background: rgba(56, 92, 255, 0.18);
+    border-color: rgba(123, 134, 255, 0.6);
+    color: var(--dt-blue-text);
+  }
+
+  .dt-code {
+    margin: 0.2rem 0 0.4rem;
+    background: #161616;
+    border: 1px solid var(--dt-border);
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    overflow-x: auto;
+  }
+
+  .dt-code code {
+    font-family: var(--sl-font-mono);
+    font-size: 0.82rem;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  .dt-pick-note {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+
+  .dt-warn {
+    color: #ffb454;
+  }
+
+  /* ---- narrow column: group each branch (question + Yes + leaf) into one
+     bordered card so the "No" arrow clearly runs between cards, not out of a
+     dangling leaf. ---- */
+  @container (max-width: 560px) {
+    /* Branch units: question + answers grouped in one bordered card, stacked. */
+    .dt-row:not(.dt-row--terminal) {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      border: 1.5px solid var(--dt-border-strong);
+      border-radius: 12px;
+      background: var(--dt-card-bg);
+      padding: 0.85rem;
+    }
+
+    /* The final fork places the question with a grid span on desktop; reset it
+       so it flows normally in the stacked mobile card. */
+    .dt-final-q,
+    .dt-final-edge,
+    .dt-final-leaf {
+      grid-column: auto;
+      grid-row: auto;
+      align-self: auto;
+      justify-content: flex-start;
+    }
+
+    .dt-row:not(.dt-row--terminal) .dt-cell {
+      border: none;
+      background: transparent;
+      border-radius: 8px;
+      padding: 0;
+      box-shadow: none;
+    }
+
+    /* Each answer reads as a nested block under its question. */
+    .dt-row:not(.dt-row--terminal) .dt-cell--leaf {
+      margin-left: 0.9rem;
+      padding: 0.6rem 0.7rem;
+      background: rgba(255, 255, 255, 0.03);
+      border-left: 2px solid rgba(123, 134, 255, 0.4);
+    }
+
+    .dt-row:not(.dt-row--terminal) .dt-cell--active {
+      border: none;
+      background: var(--ddd-glow-surface);
+      box-shadow: none;
+    }
+
+    .dt-edge {
+      flex-direction: row;
+      justify-content: flex-start;
+      gap: 0.45rem;
+      padding-left: 0.2rem;
+    }
+
+    .dt-edge .dt-arrow--right {
+      transform: rotate(90deg);
+      width: 22px;
+    }
+
+    .dt-cell--terminal {
+      width: auto;
+      margin: 0;
+    }
+  }
+</style>

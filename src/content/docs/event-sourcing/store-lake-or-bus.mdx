@@ -1,0 +1,151 @@
+---
+title: Store, lake or bus?
+description: A decision tree for choosing between event stream, event lake and event bus when emitting a new event.
+---
+
+import DecisionTree from "../../../components/DecisionTree.astro";
+
+`@ddd-ts/core` gives you three primitives for events. They look alike, since
+all three accept events and all three eventually hand them to listeners, but
+they solve different problems. Picking the wrong one tends to surface months
+later as a missing audit trail, or as a race condition you cannot reproduce
+locally.
+
+| Primitive | What it gives you |
+| --- | --- |
+| **Event stream** (`EventStreamStore`) | One stream per aggregate instance, optimistic concurrency on append, replayable. |
+| **Event lake** (`EventLakeStore`) | One shared append-only log per event type, no per-instance ordering, replayable. |
+| **Event bus** (`IEventBus`) | In-process publish and subscribe. Not durable. Fires after a successful commit. |
+
+Streams and lakes are about storage. They keep events so a projection can read
+them later. The bus is about notification. It forwards an event to whoever
+subscribed, in this process, right now.
+
+The tree asks two questions about the event you are about to emit. Both can be
+answered from the producing code.
+
+## The tree
+
+<DecisionTree
+  id="store-lake-bus"
+  start="q1"
+  nodes={{
+    q1: {
+      type: "question",
+      title: "Does the writer load the entity's prior history to decide whether this event is allowed?",
+      hint: "For example, read the account balance and reject the withdrawal if it would go negative.",
+      yes: "a1",
+      no: "q2",
+    },
+    q2: {
+      type: "question",
+      title: "Will anything read this event later: a projection, an audit log, a replay?",
+      hint: "If you would ever rebuild a read model from these events, the answer is yes.",
+      yes: "a2",
+      no: "a3",
+    },
+    a1: {
+      type: "leaf",
+      title: "Event stream",
+      detail: "Append through an EventStreamAggregateStore. The store runs the optimistic-concurrency check on the expected revision, so two concurrent writers on the same entity cannot both succeed. The bus is notified after commit.",
+    },
+    a2: {
+      type: "leaf",
+      title: "Event lake",
+      detail: "Append through an EventLakeStore. A lake is an append-only log per event type, so concurrent appends are serialized by the storage layer and projections can replay from any offset. The bus is notified after commit.",
+    },
+    a3: {
+      type: "leaf",
+      title: "Event bus",
+      detail: "Publish straight to the bus. Use it for in-process reactions that need no durability: debug logging, dev-time hooks, or handing the event to a transport that has its own persistence.",
+    },
+  }}
+/>
+
+## Why these two questions
+
+Q1 isolates the concurrency need. If two writers can race on the same entity
+(an account, an order, a ticket) and one writer's decision depends on what the
+other just did, you need optimistic concurrency on the same logical stream.
+That is exactly what `EventStreamStore` provides through the `expected: bigint`
+revision on `append`. Without it both writers read the same state, both decide
+independently, and the entity ends up invalid.
+
+Q2 isolates the durability need. Events that no projection reads and no audit
+cares about do not need to be stored. The bus delivers them and they are gone.
+Storing them anyway is cheap up front but quietly costs storage and muddies
+replay, because you can no longer tell domain facts from ephemeral
+notifications.
+
+The order matters. Concurrency comes first because it is the constraint you
+cannot retrofit. You can promote a non-durable event to the lake later. You
+cannot easily add per-instance ordering to a lake after the fact.
+
+## Examples
+
+### Account writes, event stream
+
+`Account.withdraw(amount)` reads the balance, checks the invariant, and emits
+`Withdrawn`. Two concurrent withdrawals on the same account must not both
+succeed if only one fits the balance.
+
+Q1 is yes. **Event stream.** `save(account)` appends to `Account/{id}` with the
+expected revision, so one writer wins and the other retries.
+
+```ts
+const accountStore = new AccountStore(streamStore, transaction, snapshotter);
+account.withdraw(50);
+await accountStore.save(account); // optimistic, retried on conflict
+```
+
+### Scheduled batch event, event lake
+
+A nightly job closes the reporting period and emits `ReportingPeriodClosed`.
+There is no `ReportingPeriod` aggregate instance; the event is a global fact,
+and several projections consume it.
+
+Q1 is no, Q2 is yes. **Event lake.** Append to a lake keyed by the event type,
+and every projection subscribed to it picks the event up on its next read.
+
+```ts
+const lakeStore = new EventLakeStore(layer, serializer, bus);
+await transaction.perform(async (trx) => {
+  await lakeStore.append(LakeId.from("ReportingPeriod"), [closed], trx);
+});
+```
+
+### Dev-time logger, event bus
+
+A development build wants to print every `Deposited` event to the console. It
+needs no persistence, since production will not ship the listener.
+
+Q1 is no, Q2 is no. **Event bus.** Subscribe, log, done.
+
+```ts
+bus.on(Deposited, async (e) => {
+  console.log("[dev] deposited", e.payload);
+});
+```
+
+## Pitfalls
+
+| Symptom | Likely cause |
+| --- | --- |
+| A new projection only sees events from when it started | The event was published on the bus only, so there is no log to replay from. Move it to a lake. |
+| Two concurrent writers on the same entity both succeed, state is inconsistent | The writer appends to a lake, which has no per-instance revision check. Move to a stream and load the aggregate first. |
+| A bus listener fires twice for one event | The producer publishes to the bus and also to a store that has `eventBus` set. The store already publishes after commit, so pick one. |
+| A bus listener never fires in production | The listener was registered after the store committed, or it lives in another process. The bus is in-process; cross-process delivery is the storage layer's job. |
+| The lake grows without bound with low-value events | Q2 was answered yes by reflex. If the only consumer is a metric counter, the event probably does not need persistence. |
+
+## When the tree does not fit
+
+If you need durable storage **and** per-instance ordering across many unrelated
+aggregates, you are describing an event lake feeding projections that shard by
+entity id. That is leaf `a2` plus a careful [shard key](/domain/shard-key/) on
+the projection.
+
+If you want publish and subscribe across processes (separate services, workers
+on another node), the bus alone is not enough. Pair a lake or stream with a
+transport such as Pub/Sub or Kafka: the storage layer keeps the source of
+truth, the transport delivers the notifications. None of these three primitives
+gives you cross-process delivery on its own.

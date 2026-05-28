@@ -1,0 +1,173 @@
+---
+title: Choosing a shard key
+description: A decision tree for picking a projection's shard key from what its handlers actually do.
+---
+
+import DecisionTree from "../../../components/DecisionTree.astro";
+
+A projection's **shard key** is the value the runtime uses to decide which
+events run together and in what order. Two events that share a shard key are
+processed one after another by the same worker. Two events with different
+shard keys can run in parallel.
+
+That single choice decides whether the projection is correct and how fast it
+goes. Pick a key that is too fine and events that needed to stay ordered run
+in parallel, leaving the read model inconsistent. Pick one that is too coarse
+and every event funnels through one shard, so throughput collapses and a
+single large tenant can stall the whole projection.
+
+The questions below are about what the handlers *do*: whether they read a
+specific id, whether they keep a count per dimension, whether two events of
+the same aggregate would break the read model if they arrived reversed. You
+can answer each one by reading the handler code. You do not need to reason
+about ordering or concurrency in the abstract.
+
+## The tree
+
+Read it top to bottom, and hover or tap any node to see the reasoning behind it.
+**Help me choose** walks you through it one question at a time: the matching
+path lights up, and if you paste your events in it will name the exact field to
+shard on.
+
+<DecisionTree
+  id="shard-key"
+  shape={{
+    label: "Your events (optional)",
+    placeholder: "Deposited: accountId, amount\nWithdrawn: accountId, amount",
+  }}
+  start="q1"
+  nodes={{
+    q1: {
+      type: "question",
+      title: "Does the projection keep a counter or aggregate per dimension?",
+      hint: "For example a count of enabled overlays per pool, or total deposits per account.",
+      yes: "a1",
+      no: "q2",
+    },
+    q2: {
+      type: "question",
+      title: "Do the handlers read the read model before writing it?",
+      hint: "For example store.mutate(id, fn), or load then modify then save.",
+      yes: "a2",
+      no: "q3",
+    },
+    q3: {
+      type: "question",
+      title: "Would two events of the same aggregate, handled out of order, break the read model?",
+      hint: "For example Created then Disabled. Reversed, the read model believes the entity is disabled and then enabled.",
+      yes: "a3",
+      no: "a4",
+    },
+    a1: {
+      type: "leaf",
+      title: "Shard on the aggregated dimension",
+      detail: "Use the value you count per, such as poolId for a per-pool counter. The running total reads its own previous value, so the increments have to stay ordered.",
+      pick: {
+        prompt: "Which field is the dimension you aggregate per?",
+        recommend: "shardKey: {field}",
+      },
+    },
+    a2: {
+      type: "leaf",
+      title: "Shard on the id you read and write",
+      detail: "Use the id of the projected entity. Read-before-write needs the previous handler to have committed before the next one starts, and sharding by that id is what guarantees it.",
+      pick: {
+        prompt: "Which field is the projected entity's id?",
+        recommend: "shardKey: {field}",
+      },
+    },
+    a3: {
+      type: "leaf",
+      title: "Shard on the aggregate id",
+      detail: "The aggregate id guarantees per-instance ordering. Use it whenever the order of two events of the same aggregate matters to the read model.",
+      pick: {
+        prompt: "Which field is the aggregate id?",
+        recommend: "shardKey: {field}",
+      },
+    },
+    a4: {
+      type: "leaf",
+      title: "Use the aggregate's defaultShardKey",
+      detail: "No per-entity reads, no per-dimension aggregation, no order dependency. There is no reason to deviate from the default.",
+    },
+  }}
+/>
+
+## Final check
+
+Once the tree gives you a value, confirm it appears in **every** event the
+projection handles. A shard key missing from one event is the most common
+mistake here. TypeScript catches it at compile time, but the fix is rarely a
+cast. It is one of two things:
+
+- Pick a broader dimension that is present in every event.
+- Split the projection in two, each with its own shard key.
+
+The compile error is telling you the events disagree about what they belong
+to. The events editor in the interactive panel does the same check for you: it
+only recommends a field once it is present in every event you listed.
+
+## Examples
+
+The three non-default leaves map onto patterns you will meet in most
+projections.
+
+### Per-aggregate read model
+
+`Cashflow` is materialized one row per `accountId` from `Deposited` and
+`Withdrawn`. Each handler loads the row, adjusts the running balance, and
+saves it back.
+
+Q1 finds no counter per dimension. Q2 is yes, a read-before-write on
+`accountId`. **Shard on `accountId`.**
+
+```ts
+new StreamSource({
+  aggregateType: Account.name,
+  shardKey: "accountId",
+  events: [Deposited.name, Withdrawn.name],
+});
+```
+
+A finer choice, such as a transaction id that happens to be on every event,
+would let the two handlers run in parallel for the same account, and
+read-before-write would then read a stale balance.
+
+### Counter per dimension
+
+A projection that counts enabled overlays per pool reacts to `OverlayEnabled`
+and `OverlayDisabled`. Each handler increments or decrements the count for
+`poolId`.
+
+Q1 is yes, a counter per `poolId`. **Shard on `poolId`.**
+
+`overlayId` would split a pair of enable and disable events across two shards.
+`poolId` keeps every change for the same pool serialized.
+
+### Fan-out notification, no read model
+
+A projection that emits a downstream notification on `AccountOpened` and does
+nothing else. No read model, no state.
+
+Q1, Q2 and Q3 are all no. **Use `defaultShardKey`.** Two notifications landing
+in any order have no effect on each other, so a narrower key just adds
+metadata to manage.
+
+## Pitfalls
+
+| Symptom | Likely cause |
+| --- | --- |
+| Counter is sometimes off by one | Shard key too fine, so concurrent handlers run for the same dimension. |
+| Throughput pinned to one core, one tenant owns all the latency | Shard key too coarse, or a hot key (one giant tenant). Use a finer key, or split the giant tenant out explicitly. |
+| Lifecycle out of order (`Created` after `Disabled`) | Shard key is not per-instance, but events of the same aggregate have to stay ordered. Move to the aggregate id. |
+| TypeScript says the shard key is not on every event | The events disagree about what they belong to. Pick a broader key, or split the projection. |
+| Changed the shard key on a live projection and the read model went wrong | Already-projected events were ordered under the old key. Reset the checkpoint and replay. |
+
+## When the tree does not fit
+
+If none of the questions match, the projection has no read model, does not
+aggregate, and does not care about order, then it is probably not really a
+projection. Consider a saga, or a one-shot handler on the bus instead.
+
+If you want to answer yes to two questions, the projection is doing two jobs.
+Split it, and shard each half by its own key.

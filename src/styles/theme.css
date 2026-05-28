@@ -14,10 +14,12 @@ html {
 :root,
 :root[data-theme="dark"],
 :root[data-theme="light"] {
-  --sl-font: "Supreme", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+  --sl-font:
+    "Supreme", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, "Liberation Mono", "Courier New", monospace;
+  --sl-font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
 
   /* Brand surfaces */
   --ddd-bg-from: #141414;
@@ -36,8 +38,17 @@ html {
   --sl-color-bg-inline-code: rgba(255, 255, 255, 0.06);
 
   --sl-color-text: var(--ddd-fg-muted);
-  --sl-color-text-accent: #ffd738;
+  /* Brand accent for links and the active "On this page" entry: one clean
+     brand blue. (The glow lives on the active surfaces only.) */
+  --sl-color-text-accent: #7b86ff;
   --sl-color-text-invert: #141414;
+
+  /* The blue+yellow glow is literally the homepage hero glow: a screenshot of
+     the rendered .ddd-hero__glow (the blurred Kraaft mark) cropped to its
+     coloured region, saved as glow-active.webp. Using the real rendered pixels
+     keeps it smooth (no 8-bit banding) and identical to the homepage. Cover-fit,
+     it fills every "active" surface (sidebar item, decision-tree node). */
+  --ddd-glow-surface: #1d1d1d url("/glow-active.webp") center / cover no-repeat;
 
   --sl-color-white: #fafafa;
   --sl-color-gray-1: #ededed;
@@ -61,7 +72,12 @@ html {
    same warm dark surface — not just the splash. */
 html,
 body {
-  background: linear-gradient(141deg, var(--ddd-bg-from) 16.83%, var(--ddd-bg-to) 76.02%) fixed;
+  background: linear-gradient(
+      141deg,
+      var(--ddd-bg-from) 16.83%,
+      var(--ddd-bg-to) 76.02%
+    )
+    fixed;
   color: var(--ddd-fg-muted);
 }
 
@@ -137,7 +153,9 @@ header.header .social-icons::after {
   display: none;
 }
 
-/* Cards used in docs (Starlight's <Card />) inherit the splash surface look. */
+/* Cards used in docs (Starlight's <Card />) match the homepage feature cards
+   exactly: no border, 16px radius, the same three-layer shadow with an inner
+   top highlight, and a lift on hover. */
 .sl-markdown-content .card,
 .sl-markdown-content starlight-card,
 .sl-markdown-content :where(.sl-card) {
@@ -147,12 +165,85 @@ header.header .social-icons::after {
     #1f1f1f 54.18%,
     #242424 97.73%
   );
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 14px;
+  border: none;
+  border-radius: 16px;
+  padding: clamp(1.25rem, 2vw, 1.75rem);
   box-shadow:
     0 2px 8px -1px rgba(0, 0, 0, 0.1),
     0 12px 28px -4px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+    0 24px 48px -12px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.sl-markdown-content .card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 12px -1px rgba(0, 0, 0, 0.18),
+    0 18px 38px -4px rgba(0, 0, 0, 0.32),
+    0 32px 60px -12px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Homepage card icons are monochrome white, not Starlight's accent chips. */
+.sl-markdown-content .card .icon {
+  color: var(--ddd-fg);
+}
+
+/* Pagination (Previous / Next) and Starlight link buttons take the homepage
+   CTA surface: dark gradient, layered shadow, lift on hover, no hard border. */
+.pagination-links a,
+.sl-markdown-content a.sl-link-button {
+  border: none !important;
+  border-radius: 10px;
+  background: linear-gradient(
+    172deg,
+    #1d1d1d 6.3%,
+    #1f1f1f 54.18%,
+    #242424 97.73%
+  );
+  box-shadow:
+    0 1px 4px -1px rgba(0, 0, 0, 0.1),
+    0 6px 14px -2px rgba(0, 0, 0, 0.2),
+    0 12px 24px -6px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.pagination-links a {
+  color: var(--ddd-fg);
+}
+
+.pagination-links a:hover,
+.sl-markdown-content a.sl-link-button:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 6px -1px rgba(0, 0, 0, 0.18),
+    0 10px 22px -2px rgba(0, 0, 0, 0.28),
+    0 18px 34px -8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Search field in the header reads as an input, not a button: a recessed dark
+   fill with a hairline border and a soft inset shadow (no raised drop shadow). */
+site-search button[data-open-modal] {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+site-search button[data-open-modal]:hover {
+  border-color: rgba(123, 134, 255, 0.45);
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
 /* Inline code and code blocks pick up the same surface tone. */
@@ -175,3 +266,14 @@ header.header .social-icons::after {
 .sl-markdown-content thead {
   background: rgba(255, 255, 255, 0.03);
 }
+
+/* The current page in the sidebar is filled with the brand glow surface: blue
+   on the left, warm on the right, exactly the homepage gradient. A faint blue
+   edge keeps it defined. */
+nav.sidebar a[aria-current="page"] {
+  color: var(--ddd-fg);
+  font-weight: 600;
+  background: var(--ddd-glow-surface);
+  box-shadow: inset 0 0 0 1px rgba(123, 134, 255, 0.22);
+}
+

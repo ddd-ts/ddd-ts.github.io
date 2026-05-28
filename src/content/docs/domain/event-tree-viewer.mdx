@@ -1,0 +1,175 @@
+---
+title: "@ddd-ts/event-tree-viewer"
+description: A dev-time browser for the event flow in your codebase. Static analysis turns aggregates, sagas, projections and command handlers into a navigable graph.
+---
+
+`@ddd-ts/event-tree-viewer` is a development-time tool that scans your
+TypeScript project, finds every aggregate, saga, projection, command and
+event, and renders the relationships between them as an interactive graph.
+
+It is read-only: it never touches your code or your stores. It exists so you
+can answer questions like "what reacts to `Deposited`?", "which commands does
+this saga send?", "is anything still listening to that event I thought I
+removed?" without grepping.
+
+:::caution[Status]
+The package is currently workspace-only (not yet published to npm). The CLI
+and viewer are functional, but the public exports may still move.
+:::
+
+## What it detects
+
+The scanner is built on top of `@ddd-ts/event-tree`, a tiny static-analysis
+engine that walks each TypeScript file with [oxc](https://oxc-project.github.io/)
+and applies a set of recognisers. The default recognisers know about every
+shape `@ddd-ts/core` exposes:
+
+| Node | Detected by |
+| --- | --- |
+| **event** | a class extending `EsEvent(...)`, `Event` or `OldEvent` |
+| **command** | a class extending `Command(...)` or `$Command(...)` |
+| **aggregate** | each `@On(Event)`-decorated method inside an `EsAggregate(...)` class |
+| **saga** | each `@On(Event)`-decorated method inside a `Saga` class |
+| **projection** | each `@On(Event)`-decorated method inside a `Projection(...)` class |
+
+Aggregates, sagas and projections are recorded **per handler**, not per
+class. A `Saga` with three reactions becomes three nodes, each with its own
+incoming and outgoing edges. That granularity is what makes the graph
+useful: a node is "the thing that reacts to `Deposited`", not "the file
+that happens to contain handlers".
+
+Edges follow the same shape. Each one carries a verb:
+
+| Verb | From | To |
+| --- | --- | --- |
+| **triggers** | event | aggregate / saga / projection handler |
+| **emits** | aggregate / saga handler | event |
+| **sends** | aggregate / saga handler | command |
+| **emits** | `CommandHandler<Command>` body | event constructed inside |
+
+`CommandHandler` bodies are walked for `new SomeEvent(...)` expressions, so
+the command-to-event edge is inferred from the implementation, not from a
+decorator.
+
+## Running the viewer
+
+The package ships an `event-tree-viewer` binary that boots a local Vite dev
+server on port `20031`:
+
+```sh
+pnpm exec event-tree-viewer
+```
+
+By default the scanner starts from the current working directory. Point it
+elsewhere by setting `EVENTVIZ_SCAN_ROOT`:
+
+```sh
+EVENTVIZ_SCAN_ROOT=./packages/billing pnpm exec event-tree-viewer
+```
+
+The viewer watches every `.ts` file under the scan root and invalidates its
+cached graph on change, so editing a saga and tabbing back to the browser
+shows the updated edges without a manual refresh.
+
+## The three views
+
+The viewer renders the same graph three ways. Switch between them from the
+top toolbar.
+
+- **List** is a flat, grouped index: one section per node kind, every
+  node click-selects in the inspector. Useful when you know the name and
+  just want to jump to it.
+- **Tree** lays the graph out as nested branches rooted at events (or at
+  whatever the `Direction` toggle selects). Best for "what happens *after*
+  this event?".
+- **Graph** runs an [ELK](https://eclipse.dev/elk/) layered layout per
+  connected component and per domain. Best for "show me the whole flow".
+
+The **Direction** toggle flips the graph between forward (event → reactor →
+emitted event) and reverse (event ← reactor ← cause). Forward is the
+default and matches how the runtime actually executes.
+
+## Filters and domain grouping
+
+The filter bar narrows the visible graph by free-text search and by node
+kind. Filters apply across every view simultaneously, and the inspector
+updates with whatever is selected.
+
+Nodes are also grouped into **domains**, derived from their name prefix
+(everything before the first dot for handlers, the leading PascalCase
+segment otherwise). Each domain renders as its own collapsible panel in the
+Graph view, so a multi-module codebase produces multiple plots rather than
+one giant tangle.
+
+## The inspector
+
+Clicking a node opens an inspector panel with:
+
+- the node's name, alias and base class (for events and commands);
+- its source file path;
+- every incoming and outgoing edge, with the verb and the peer kind;
+- an **Open in editor** button that uses
+  [`launch-editor`](https://github.com/yyx990803/launch-editor) to jump
+  directly to the declaration in your `$EDITOR`.
+
+Selecting a peer from the incoming/outgoing list re-centers the inspector
+on it, so you can walk the graph by clicking.
+
+## Exporting
+
+The header has an **Export graph** action that produces a
+[Cypher](https://neo4j.com/docs/cypher-manual/current/) `CREATE` statement
+for the current graph. The dialog has a *Follow current filters* toggle: on
+by default, so the export reflects exactly what you see, off if you want
+the full graph regardless of the filter bar.
+
+```cypher
+CREATE
+  (n0:Event {name: 'Deposited'}),
+  (n1:Aggregate {name: 'Account.onDeposited'}),
+  (n0)-[:TRIGGERS]->(n1);
+```
+
+The output is meant to be pasted straight into a Neo4j browser or any
+Cypher-compatible store. It is the only export format today; the plumbing
+in `domain/cypher-export.ts` is straightforward to extend if you need
+GraphML, DOT or anything else.
+
+## The underlying engine
+
+`@ddd-ts/event-tree` is the engine the viewer feeds from. It exposes a
+small API:
+
+```ts
+import { engine } from "@ddd-ts/event-tree";
+
+engine.on((node, parent, ctx, file) => {
+  // walk every AST node, emit nodes / edges via engine.saveNode / saveEdge
+});
+
+engine.run("./src");
+const nodes = engine.getNodes();
+const edges = engine.getEdges();
+```
+
+The default recognisers (events, commands, aggregates, sagas, projections,
+command handlers) are registered the first time the engine is imported. You
+can register additional `engine.on(...)` walkers to extend detection for
+project-specific patterns: a custom base class, a homemade decorator, a
+naming convention.
+
+Recognisers are pure: given an AST node they decide whether to emit a graph
+node or edge. Nothing else in the pipeline is opinionated about your code.
+
+## When to reach for it
+
+- During a refactor, to check that nothing still reacts to an event you
+  thought you removed.
+- When onboarding someone, to give them a picture of the write side
+  without making them read every file.
+- When designing a new flow, to see whether a candidate event already has
+  reactors that would fire unexpectedly.
+
+The viewer is deliberately not a runtime tool. The graph is what the *code*
+says; verifying that production matches is a job for your traces and your
+event store, not for static analysis.
